@@ -7,7 +7,7 @@ original code, not derived from any existing manager app.
 App name **VMPro** · versionName **4.0** · website **https://vancedmanager.com**
 
 > We build this manager from scratch, we just add publicly available links from GitHub
-> users: **J-hc, ReVanced, & Morphe**.
+> users: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module), [`ReVanced`](https://github.com/ReVanced), & [`Morphe`](https://github.com/MorpheApp)**.
 
 ## What it does
 
@@ -21,27 +21,8 @@ Three tabs, all fetched live from the GitHub REST API (no token needed):
   - **MicroG RE** — [`MorpheApp/MicroG-RE`](https://github.com/MorpheApp/MicroG-RE/releases)
 - **Modules** — the same app list as *Apps* but the Magisk/KernelSU `.zip` modules.
 
-The Apps/Modules entries are resolved from the **latest matching release** of
-[`j-hc/revanced-magisk-module`](https://github.com/j-hc/revanced-magisk-module/releases)
-by decoding its asset names (`{app}-{variant}-[module-]{version}-{arch}`).
-
 \* Twitter (piko) is only published as a module `.zip`, so it appears under *Modules* and is
 marked **N/A** under *Apps* — the manager never fabricates a file that doesn't exist upstream.
-
-Navigation is a **bottom bar** (Apps / MicroG / Modules), Play-Store style.
-
-Each row has an **expandable dropdown** showing *version number*, *patch version* (parsed
-from the j-hc release notes, e.g. `MorpheApp/patches-1.32.0`), *compiled by*, and *size*.
-
-**Button states:**
-- `Download` → `Downloading…` → **`Install`** (APK) / **`Downloaded`** (module)
-- Once an app is installed on the device, its button shows **`Installed`**, and the
-  dropdown gains an **`Uninstall`** action.
-- When j-hc ships a newer version than what's installed, the button becomes **`Update`**.
-
-Install state is detected via `PackageManager` (declared `<queries>` for Android 11+) and
-re-checked every time you return to the app. An **About** screen credits the upstream
-authors and links the website.
 
 The app never hosts, builds, or modifies any file — every download comes straight from the
 official GitHub release pages.
@@ -49,16 +30,20 @@ official GitHub release pages.
 ## Project layout
 
 ```
-app/src/main/java/com/vanced/manager/
+app/src/main/java/com/vmpro/app/
+  VmproApp.kt                  # Application: analytics init
   MainActivity.kt              # Compose UI: tabs, sections, app rows, download button
-  data/Model.kt                # Release / Asset models + byte formatting
+  analytics/Analytics.kt       # Aptabase event wrapper (privacy-first)
+  data/Model.kt                # Release / Asset models, version compare, byte formatting
   data/Source.kt               # Source repos (used by the About page)
   data/Catalog.kt              # Curated app list + asset-name matching rules
   data/GithubRepository.kt     # OkHttp fetch + latest-asset resolution
-  ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download actions
-  ui/Theme.kt                  # Material 3 dark theme
+  ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download/install actions
+  ui/Theme.kt                  # Material 3 theme (blue)
   ui/AboutScreen.kt            # About / credits page
-  util/DownloadController.kt   # DownloadManager, completion tracking, APK install
+  util/DownloadController.kt   # DownloadManager + completion tracking
+  util/Downloader.kt           # Open URL + uninstall (PackageInstaller)
+  util/UninstallReceiver.kt    # Receives uninstall result -> confirm dialog
 ```
 
 ## Building
