@@ -14,3 +14,7 @@
 /keystore/
 *.jks
 *.keystore
+
+# Working icon assets (source exports; the app uses res/ and docs/ copies)
+/icons/
+/vmpro icons/

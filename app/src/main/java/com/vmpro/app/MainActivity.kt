@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
@@ -125,6 +126,34 @@ private val NAV_DESTS = listOf(
     NavDest(TAB_MODULES, Icons.Filled.Extension),
 )
 
+/** Suggests switching to the other MicroG when one is already installed. */
+private data class MicrogSwitch(val installedLabel: String, val target: CatalogItem)
+
+/**
+ * GmsCore and MicroG RE share one package, so only the installed version tells them apart:
+ * GmsCore uses 0.x.y builds, MicroG RE uses 6.x. If one is installed, suggest the other.
+ */
+private fun computeMicrogSwitch(
+    sections: List<Section>,
+    installed: Map<String, InstalledApp>,
+): MicrogSwitch? {
+    val items = sections.flatMap { it.items }
+    val gmscore = items.find { it.label == "GmsCore" } ?: return null
+    val microgre = items.find { it.label == "MicroG RE" } ?: return null
+    val pkg = gmscore.packages.firstOrNull() ?: return null
+    val installedVersion = installed[pkg]?.versionName ?: return null
+
+    val isGmscore = when {
+        gmscore.details?.version == installedVersion -> true
+        microgre.details?.version == installedVersion -> false
+        installedVersion.startsWith("0") -> true
+        else -> false
+    }
+    val target = if (isGmscore) microgre else gmscore
+    if (target.asset == null) return null
+    return MicrogSwitch(if (isGmscore) "GmsCore" else "MicroG RE", target)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManagerScreen(
@@ -218,6 +247,9 @@ fun ManagerScreen(
                     "Only one MicroG can be installed at a time — GmsCore and MicroG RE " +
                         "share the same package name, so installing one replaces the other."
                 } else null,
+                switch = if (selectedTab == TAB_MICROG) {
+                    computeMicrogSwitch(s.sections, installed)
+                } else null,
             )
         }
     }
@@ -264,6 +296,7 @@ private fun SectionList(
     installed: Map<String, InstalledApp>,
     onAction: (CatalogItem) -> Unit,
     notice: String? = null,
+    switch: MicrogSwitch? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -276,6 +309,9 @@ private fun SectionList(
     ) {
         if (notice != null) {
             item(key = "notice") { NoticeCard(notice) }
+        }
+        if (switch != null) {
+            item(key = "switch") { SwitchCard(switch, onAction) }
         }
         sections.forEachIndexed { si, section ->
             if (section.title != null) {
@@ -314,6 +350,37 @@ private fun NoticeCard(text: String) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
             )
+        }
+    }
+}
+
+@Composable
+private fun SwitchCard(switch: MicrogSwitch, onAction: (CatalogItem) -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.SwapHoriz,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("${switch.installedLabel} is installed", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Switch to ${switch.target.label}?",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = { onAction(switch.target) }) { Text("Switch") }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.vmpro.app.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,8 +33,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.vmpro.app.R
 import com.vmpro.app.data.SOURCES
 import com.vmpro.app.data.Source
 import com.vmpro.app.util.Downloader
@@ -66,11 +69,19 @@ fun AboutScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                "VMPro",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.ic_vmpro_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    "VMPro",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Text(
                 "Version 4.0",
                 style = MaterialTheme.typography.labelMedium,
