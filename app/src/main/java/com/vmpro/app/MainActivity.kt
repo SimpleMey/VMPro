@@ -85,6 +85,7 @@ import com.vmpro.app.ui.TAB_MODULES
 import com.vmpro.app.ui.TAB_TITLES
 import com.vmpro.app.ui.TabState
 import com.vmpro.app.ui.VmproTheme
+import com.vmpro.app.R
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadPhase
 
@@ -150,7 +151,17 @@ fun ManagerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VMPro", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_vmpro_logo),
+                            contentDescription = null,
+                            modifier = Modifier.size(30.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("VMPro", fontWeight = FontWeight.Bold)
+                    }
+                },
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
@@ -203,6 +214,10 @@ fun ManagerScreen(
                 phases = phases,
                 installed = installed,
                 onAction = viewModel::onAction,
+                notice = if (selectedTab == TAB_MICROG) {
+                    "Only one MicroG can be installed at a time — GmsCore and MicroG RE " +
+                        "share the same package name, so installing one replaces the other."
+                } else null,
             )
         }
     }
@@ -248,6 +263,7 @@ private fun SectionList(
     phases: Map<String, DownloadPhase>,
     installed: Map<String, InstalledApp>,
     onAction: (CatalogItem) -> Unit,
+    notice: String? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -258,6 +274,9 @@ private fun SectionList(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (notice != null) {
+            item(key = "notice") { NoticeCard(notice) }
+        }
         sections.forEachIndexed { si, section ->
             if (section.title != null) {
                 item(key = "h$si") { SectionHeader(section) }
@@ -268,6 +287,33 @@ private fun SectionList(
             ) { i ->
                 AppRow(section.items[i], phases, installed, onAction)
             }
+        }
+    }
+}
+
+@Composable
+private fun NoticeCard(text: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            )
         }
     }
 }
