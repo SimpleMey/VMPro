@@ -8,7 +8,7 @@ A lightweight Android app that surfaces **publicly available** release downloads
 GitHub and lets you grab them on-device. Built from scratch in Kotlin + Jetpack Compose —
 original code, not derived from any existing manager app.
 
-App name **VMPro** · versionName **4.0** · website **https://vancedmanager.com**
+App name **VMPro** · versionName **4.1** · website **https://vancedmanager.com**
 
 > We build this manager from scratch, we just add publicly available links from GitHub
 > users: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module), [`ReVanced`](https://github.com/ReVanced), & [`Morphe`](https://github.com/MorpheApp)**.
@@ -96,5 +96,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/vmpro-4.0.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.1.apk
 ```

@@ -83,7 +83,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                "Version 4.0",
+                "Version 4.1",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
