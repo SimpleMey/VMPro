@@ -58,6 +58,15 @@ android {
         }
     }
 
+    // Name the built APK "vmpro-<versionName>.apk" (e.g. vmpro-4.0.apk) instead of app-release.apk.
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+                "vmpro-${variant.versionName}.apk"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -1,4 +1,8 @@
-# VMPro
+<p align="center">
+  <img src="docs/vmpro-icon.png" width="120" alt="VMPro icon">
+</p>
+
+<h1 align="center">VMPro</h1>
 
 A lightweight Android app that surfaces **publicly available** release downloads from
 GitHub and lets you grab them on-device. Built from scratch in Kotlin + Jetpack Compose —
@@ -92,5 +96,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.0.apk
 ```
