@@ -71,9 +71,19 @@ jobs:
           name: VMPro-release-apk
           path: app/build/outputs/apk/release/vmpro-*.apk
 
+      - name: Prepare release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          awk -v ver="## ${{ github.ref_name }}" '
+            $0==ver {p=1; next}
+            /^## v/ && p {exit}
+            p {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          echo "----- release notes -----"; cat RELEASE_NOTES.md
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/vmpro-*.apk
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
