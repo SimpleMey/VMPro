@@ -117,6 +117,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val downloadPhases get() = downloads.phases
+    val downloadProgress get() = downloads.progress
 
     fun onAction(item: CatalogItem) {
         val asset = item.asset ?: return

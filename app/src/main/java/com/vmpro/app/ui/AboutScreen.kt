@@ -83,7 +83,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                "Version 4.1",
+                "Version 4.2",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
@@ -126,7 +126,7 @@ fun AboutScreen(onBack: () -> Unit) {
 @Composable
 private fun WebsiteCard() {
     val context = LocalContext.current
-    val url = "https://vancedmanager.com"
+    val url = "https://vmpro.app"
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(14.dp),
@@ -149,7 +149,7 @@ private fun WebsiteCard() {
             Column(Modifier.weight(1f)) {
                 Text("Website", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "vancedmanager.com",
+                    "vmpro.app",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )

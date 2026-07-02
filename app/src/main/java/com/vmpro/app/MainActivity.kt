@@ -163,6 +163,7 @@ fun ManagerScreen(
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val states by viewModel.states.collectAsStateWithLifecycle()
     val phases by viewModel.downloadPhases.collectAsStateWithLifecycle()
+    val progress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val installed by viewModel.installed.collectAsStateWithLifecycle()
     val conflict by viewModel.conflict.collectAsStateWithLifecycle()
     val state = states[selectedTab] ?: TabState.Loading
@@ -241,6 +242,7 @@ fun ManagerScreen(
                 sections = s.sections,
                 padding = padding,
                 phases = phases,
+                progress = progress,
                 installed = installed,
                 onAction = viewModel::onAction,
                 notice = if (selectedTab == TAB_MICROG) {
@@ -293,6 +295,7 @@ private fun SectionList(
     sections: List<Section>,
     padding: PaddingValues,
     phases: Map<String, DownloadPhase>,
+    progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
     onAction: (CatalogItem) -> Unit,
     notice: String? = null,
@@ -321,7 +324,7 @@ private fun SectionList(
                 count = section.items.size,
                 key = { i -> "s${si}_$i" },
             ) { i ->
-                AppRow(section.items[i], phases, installed, onAction)
+                AppRow(section.items[i], phases, progress, installed, onAction)
             }
         }
     }
@@ -413,6 +416,7 @@ private fun SectionHeader(section: Section) {
 private fun AppRow(
     item: CatalogItem,
     phases: Map<String, DownloadPhase>,
+    progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
     onAction: (CatalogItem) -> Unit,
 ) {
@@ -460,7 +464,7 @@ private fun AppRow(
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                StateButton(item, phases, installedApp, updatable, onAction)
+                StateButton(item, phases, progress, installedApp, updatable, onAction)
                 if (item.details != null) {
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
@@ -533,6 +537,7 @@ private fun DetailRow(label: String, value: String) {
 private fun StateButton(
     item: CatalogItem,
     phases: Map<String, DownloadPhase>,
+    progress: Map<String, Int>,
     installedApp: InstalledApp?,
     updatable: Boolean,
     onAction: (CatalogItem) -> Unit,
@@ -547,12 +552,18 @@ private fun StateButton(
     // so the button flips to "Installed" as soon as the app is detected on the device.
     val installedCurrent = !item.exclusive && asset.isApk && installedApp != null && !updatable
     when {
-        phase == DownloadPhase.DOWNLOADING -> FilledTonalButton(onClick = {}, enabled = false) {
+        phase == DownloadPhase.DOWNLOADING -> FilledTonalButton(
+            onClick = {},
+            enabled = false,
+            contentPadding = PaddingValues(horizontal = 14.dp),
+        ) {
             CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(15.dp),
                 strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.primary,
             )
+            Spacer(Modifier.width(8.dp))
+            Text("${progress[asset.downloadUrl] ?: 0}%")
         }
 
         installedCurrent ->

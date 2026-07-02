@@ -1,6 +1,7 @@
 package com.vmpro.app.analytics
 
 import android.content.Context
+import android.util.Log
 import com.aptabase.Aptabase
 import com.vmpro.app.BuildConfig
 
@@ -23,10 +24,12 @@ object Analytics {
     fun init(context: Context) {
         if (appKey.isBlank()) return
         runCatching { Aptabase.instance.initialize(context.applicationContext, appKey) }
+            .onFailure { Log.w("Analytics", "Aptabase init failed", it) }
     }
 
     fun event(name: String, props: Map<String, Any> = emptyMap()) {
         runCatching { Aptabase.instance.trackEvent(name, props) }
+            .onFailure { Log.w("Analytics", "event '$name' failed", it) }
     }
 
     // --- Typed helpers keep event names consistent across the app ---

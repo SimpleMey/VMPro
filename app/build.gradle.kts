@@ -27,8 +27,8 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 41
-        versionName = "4.1"
+        versionCode = 42
+        versionName = "4.2"
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "APTABASE_KEY", "\"$aptabaseKey\"")
