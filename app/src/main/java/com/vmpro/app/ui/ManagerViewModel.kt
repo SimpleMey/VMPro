@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.vmpro.app.BuildConfig
 import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.data.APP_CATALOG
 import com.vmpro.app.data.Asset
@@ -14,6 +15,7 @@ import com.vmpro.app.data.MICROG_CATALOG
 import com.vmpro.app.data.Project
 import com.vmpro.app.data.Release
 import com.vmpro.app.data.formatBytes
+import com.vmpro.app.data.isNewerVersion
 import com.vmpro.app.data.parsePatchVersion
 import com.vmpro.app.data.versionOf
 import com.vmpro.app.util.DownloadController
@@ -98,10 +100,28 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var jhcReleases: List<Release>? = null
 
+    /** Newer VMPro version string (e.g. "4.3") when an app update is available, else null. */
+    private val _updateVersion = MutableStateFlow<String?>(null)
+    val updateVersion: StateFlow<String?> = _updateVersion.asStateFlow()
+
     init {
         refreshInstalled()
         Analytics.tabView(TAB_TITLES[TAB_APPS])
         load(TAB_APPS)
+        checkForUpdate()
+    }
+
+    /** Compare the latest VMPro release on GitHub against this build's version. */
+    private fun checkForUpdate() {
+        viewModelScope.launch {
+            runCatching {
+                val releases = repository.fetchReleases("SimpleMey", "VMPro", perPage = 5)
+                val latest = releases.firstOrNull()?.tag?.removePrefix("v")?.trim()
+                if (latest != null && isNewerVersion(latest, BuildConfig.VERSION_NAME)) {
+                    _updateVersion.value = latest
+                }
+            }
+        }
     }
 
     fun selectTab(index: Int) {

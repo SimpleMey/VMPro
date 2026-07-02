@@ -166,6 +166,8 @@ fun ManagerScreen(
     val progress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val installed by viewModel.installed.collectAsStateWithLifecycle()
     val conflict by viewModel.conflict.collectAsStateWithLifecycle()
+    val updateVersion by viewModel.updateVersion.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val state = states[selectedTab] ?: TabState.Loading
 
     // Re-check installed apps whenever the user returns to the app.
@@ -180,32 +182,37 @@ fun ManagerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_vmpro_logo),
-                            contentDescription = null,
-                            modifier = Modifier.size(30.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("VMPro", fontWeight = FontWeight.Bold)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                    }
-                    IconButton(onClick = onOpenAbout) {
-                        Icon(Icons.Outlined.Info, contentDescription = "About")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
+            Column {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_vmpro_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(30.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("VMPro", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.refresh() }) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                        }
+                        IconButton(onClick = onOpenAbout) {
+                            Icon(Icons.Outlined.Info, contentDescription = "About")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+                updateVersion?.let { v ->
+                    UpdateBanner(version = v, onUpdate = { Downloader.openUrl(context, "https://vmpro.app") })
+                }
+            }
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -326,6 +333,39 @@ private fun SectionList(
             ) { i ->
                 AppRow(section.items[i], phases, progress, installed, onAction)
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(version: String, onUpdate: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_vmpro_logo),
+                contentDescription = null,
+                modifier = Modifier.size(34.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Update available",
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    "Version $version — tap Update to get it",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onUpdate) { Text("Update") }
         }
     }
 }

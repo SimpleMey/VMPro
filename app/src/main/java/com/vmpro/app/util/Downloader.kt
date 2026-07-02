@@ -20,6 +20,20 @@ object Downloader {
     }
 
     /**
+     * Open a Telegram channel in the Telegram app if installed (tg:// deep link),
+     * otherwise fall back to the web (t.me) in the browser.
+     */
+    fun openTelegram(context: Context, channel: String) {
+        val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=$channel"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(appIntent)
+        } catch (_: Exception) {
+            openUrl(context, "https://t.me/$channel")
+        }
+    }
+
+    /**
      * Launch the system uninstall dialog for [packageName].
      *
      * Primary path is [android.content.pm.PackageInstaller.uninstall] (the modern, reliable

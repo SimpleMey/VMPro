@@ -18,6 +18,11 @@
         <package android:name="com.reddit.frontpage" />
         <package android:name="com.twitter.android" />
         <package android:name="app.revanced.android.gms" />
+        <!-- Resolve the Telegram app (tg://) so we can open it directly when installed -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tg" />
+        </intent>
     </queries>
 
     <application
