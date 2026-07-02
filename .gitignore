@@ -18,3 +18,7 @@
 # Working icon assets (source exports; the app uses res/ and docs/ copies)
 /icons/
 /vmpro icons/
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log
