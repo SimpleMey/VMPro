@@ -8,7 +8,7 @@ A lightweight Android app that surfaces **publicly available** release downloads
 GitHub and lets you grab them on-device. Built from scratch in Kotlin + Jetpack Compose —
 original code, not derived from any existing manager app.
 
-App name **VMPro** · versionName **4.2** · website **https://vmpro.app**
+App name **VMPro** · versionName **4.3** · website **https://vmpro.app**
 
 > We build this manager from scratch, we just add publicly available links from GitHub
 > users: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module), [`ReVanced`](https://github.com/ReVanced), & [`Morphe`](https://github.com/MorpheApp)**.
@@ -37,7 +37,7 @@ official GitHub release pages.
 app/src/main/java/com/vmpro/app/
   VmproApp.kt                  # Application: analytics init
   MainActivity.kt              # Compose UI: tabs, sections, app rows, download button
-  analytics/Analytics.kt       # Aptabase event wrapper (privacy-first)
+  analytics/Analytics.kt       # PostHog event wrapper (debug-guarded)
   data/Model.kt                # Release / Asset models, version compare, byte formatting
   data/Source.kt               # Source repos (used by the About page)
   data/Catalog.kt              # Curated app list + asset-name matching rules
@@ -81,14 +81,16 @@ the key still compiles).
 
 ### Analytics key
 
-Analytics (Aptabase) is injected at build time from `local.properties` (gitignored):
+Analytics (PostHog) is injected at build time from `local.properties` (gitignored):
 
 ```properties
-aptabase.key=A-XX-XXXXXXXXXX
+posthog.key=phc_XXXXXXXXXXXXXXXX
+posthog.host=https://us.i.posthog.com   # or eu.i.posthog.com / self-hosted
 ```
 
-Leave it blank to disable analytics entirely — the app runs normally either way. Get a key
-free at https://aptabase.com (or self-host).
+Leave the key blank to disable analytics entirely — the app runs normally either way.
+Analytics is also disabled automatically in debug builds. Get a key free at
+https://posthog.com (or self-host).
 
 ## Install on a device
 
@@ -96,5 +98,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/vmpro-4.2.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.3.apk
 ```

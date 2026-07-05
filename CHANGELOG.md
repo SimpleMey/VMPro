@@ -2,6 +2,14 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.3
+- 🌗 **Dark / Light theme toggle** in the header — your choice is remembered.
+- 🎨 **Reworked light mode** so it actually looks good.
+- 📶 **Download progress bar** on each app while it downloads.
+- 🗓️ **Last updated date** now shown in each app's details dropdown.
+- 🧊 **Transparent bottom navigation bar** for a cleaner look.
+- Switched analytics to a more scalable backend.
+
 ## v4.2
 - 📊 **Download progress** — APK downloads now show a live percentage on the button.
 - 🔔 **Update notifications** — VMPro tells you when a newer version is available, with a banner under the header and a one-tap Update button.

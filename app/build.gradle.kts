@@ -12,12 +12,15 @@ val keystoreProps = Properties().apply {
     if (f.exists()) FileInputStream(f).use { load(it) }
 }
 
-// Aptabase analytics key — read from local.properties (gitignored) so it stays out of the
-// public repo. Set `aptabase.key=A-XX-XXXXXXXXXX` there; empty disables analytics gracefully.
-val aptabaseKey: String = Properties().apply {
+// PostHog analytics config — read from local.properties (gitignored) so it stays out of the
+// public repo. Set `posthog.key=phc_...` (and optionally `posthog.host=`) there; a blank key
+// disables analytics gracefully.
+private val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) FileInputStream(f).use { load(it) }
-}.getProperty("aptabase.key", "")
+}
+val posthogKey: String = localProps.getProperty("posthog.key", "")
+val posthogHost: String = localProps.getProperty("posthog.host", "https://us.i.posthog.com")
 
 android {
     namespace = "com.vmpro.app"
@@ -27,11 +30,12 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 42
-        versionName = "4.2"
+        versionCode = 43
+        versionName = "4.3"
         vectorDrawables { useSupportLibrary = true }
 
-        buildConfigField("String", "APTABASE_KEY", "\"$aptabaseKey\"")
+        buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
+        buildConfigField("String", "POSTHOG_HOST", "\"$posthogHost\"")
     }
 
     signingConfigs {
@@ -108,8 +112,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Privacy-first, open-source analytics (no PII, no Google dependency)
-    implementation("com.github.aptabase:aptabase-kotlin:0.0.8")
+    // Product analytics (open-source, self-hostable; generous free tier).
+    // Pinned to 3.35.0 — the last release built with Kotlin 1.8/1.9 metadata that our
+    // Kotlin 1.9.24 toolchain can read (3.40+ require Kotlin 2.1).
+    implementation("com.posthog:posthog-android:3.35.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

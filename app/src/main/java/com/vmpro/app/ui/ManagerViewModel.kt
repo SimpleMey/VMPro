@@ -38,6 +38,7 @@ data class AppDetails(
     val patch: String?,
     val compiledBy: String,
     val size: String,
+    val lastUpdated: String?,
 )
 
 /** A single resolved row: an app/module and the file to download (if any). */
@@ -217,6 +218,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                         patch = parsePatchVersion(it.release.body, entry.variant),
                         compiledBy = J_HC.owner,
                         size = formatBytes(it.asset.sizeBytes),
+                        lastUpdated = it.release.publishedAt.ifBlank { null },
                     )
                 }
                 val packages = if (wantApk) entry.packages else emptyList()
@@ -246,6 +248,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                     patch = null,
                     compiledBy = entry.owner,
                     size = formatBytes(it.asset.sizeBytes),
+                    lastUpdated = it.release.publishedAt.ifBlank { null },
                 )
             }
             CatalogItem(

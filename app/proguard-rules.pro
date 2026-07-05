@@ -5,9 +5,8 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 
-# --- Aptabase analytics SDK ---
--keep class com.aptabase.** { *; }
--dontwarn com.aptabase.**
+# --- PostHog analytics SDK (ships its own consumer rules; silence optional deps) ---
+-dontwarn com.posthog.**
 
 # --- AndroidX Lifecycle: keep the Compose CompositionLocal providers so R8 doesn't strip
 # LocalLifecycleOwner (defensive; also fixed by lifecycle 2.8.3+). ---

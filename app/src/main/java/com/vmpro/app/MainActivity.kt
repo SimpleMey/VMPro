@@ -1,5 +1,6 @@
 package com.vmpro.app
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -7,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,8 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Security
@@ -42,6 +46,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -57,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,7 +92,9 @@ import com.vmpro.app.ui.TAB_MICROG
 import com.vmpro.app.ui.TAB_MODULES
 import com.vmpro.app.ui.TAB_TITLES
 import com.vmpro.app.ui.TabState
+import com.vmpro.app.ui.ThemePrefs
 import com.vmpro.app.ui.VmproTheme
+import androidx.core.view.WindowCompat
 import com.vmpro.app.R
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadPhase
@@ -95,12 +104,29 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            VmproTheme {
+            val context = LocalContext.current
+            val systemDark = isSystemInDarkTheme()
+            var isDark by remember { mutableStateOf(ThemePrefs.get(context) ?: systemDark) }
+
+            // Keep the status-bar icons legible against the current theme.
+            val view = LocalView.current
+            SideEffect {
+                val window = (view.context as Activity).window
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
+            }
+
+            VmproTheme(darkTheme = isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    App()
+                    App(
+                        isDark = isDark,
+                        onToggleTheme = {
+                            isDark = !isDark
+                            ThemePrefs.set(context, isDark)
+                        },
+                    )
                 }
             }
         }
@@ -108,13 +134,17 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun App() {
+private fun App(isDark: Boolean, onToggleTheme: () -> Unit) {
     var showAbout by remember { mutableStateOf(false) }
     if (showAbout) {
         BackHandler { showAbout = false }
         AboutScreen(onBack = { showAbout = false })
     } else {
-        ManagerScreen(onOpenAbout = { showAbout = true })
+        ManagerScreen(
+            onOpenAbout = { showAbout = true },
+            isDark = isDark,
+            onToggleTheme = onToggleTheme,
+        )
     }
 }
 
@@ -158,6 +188,8 @@ private fun computeMicrogSwitch(
 @Composable
 fun ManagerScreen(
     onOpenAbout: () -> Unit,
+    isDark: Boolean,
+    onToggleTheme: () -> Unit,
     viewModel: ManagerViewModel = viewModel(),
 ) {
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
@@ -196,6 +228,12 @@ fun ManagerScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = onToggleTheme) {
+                            Icon(
+                                if (isDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                                contentDescription = if (isDark) "Switch to light mode" else "Switch to dark mode",
+                            )
+                        }
                         IconButton(onClick = { viewModel.refresh() }) {
                             Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                         }
@@ -215,7 +253,10 @@ fun ManagerScreen(
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationBar(
+                containerColor = Color.Transparent,
+                tonalElevation = 0.dp,
+            ) {
                 NAV_DESTS.forEach { dest ->
                     NavigationBarItem(
                         selected = selectedTab == dest.tab,
@@ -516,6 +557,21 @@ private fun AppRow(
                 }
             }
 
+            item.asset?.let { asset ->
+                if (phases[asset.downloadUrl] == DownloadPhase.DOWNLOADING) {
+                    Spacer(Modifier.size(10.dp))
+                    @Suppress("DEPRECATION")
+                    LinearProgressIndicator(
+                        progress = (progress[asset.downloadUrl] ?: 0) / 100f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    )
+                }
+            }
+
             AnimatedVisibility(visible = expanded && item.details != null) {
                 DetailsPanel(item, installedApp)
             }
@@ -534,6 +590,7 @@ private fun DetailsPanel(item: CatalogItem, installedApp: InstalledApp?) {
         d.patch?.let { DetailRow("Patch version", it) }
         DetailRow("Compiled by", d.compiledBy)
         DetailRow("Size", d.size)
+        d.lastUpdated?.let { DetailRow("Last updated", it) }
         installedApp?.let { DetailRow("Installed", it.versionName.ifBlank { "yes" }) }
 
         if (installedApp != null) {

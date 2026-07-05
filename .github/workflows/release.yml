@@ -8,7 +8,7 @@ name: Release APK
 #   KEYSTORE_PASSWORD  the keystore password
 #   KEY_ALIAS          vmpro
 #   KEY_PASSWORD       the key password (same as keystore password here)
-#   APTABASE_KEY       your Aptabase app key (optional; blank disables analytics)
+#   POSTHOG_KEY        your PostHog project API key, "phc_..." (optional; blank disables analytics)
 
 on:
   push:
@@ -55,10 +55,10 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
           } > keystore.properties
 
-      - name: Inject Aptabase key
+      - name: Inject PostHog key
         env:
-          APTABASE_KEY: ${{ secrets.APTABASE_KEY }}
-        run: echo "aptabase.key=$APTABASE_KEY" >> local.properties
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+        run: echo "posthog.key=$POSTHOG_KEY" >> local.properties
 
       - name: Build signed release APK
         run: |

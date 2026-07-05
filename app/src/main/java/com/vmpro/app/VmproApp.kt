@@ -7,6 +7,5 @@ class VmproApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Analytics.init(this)
-        Analytics.appOpen()
     }
 }
