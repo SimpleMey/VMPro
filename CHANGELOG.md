@@ -2,6 +2,9 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.3.2
+- Maintenance release — no user-facing changes.
+
 ## v4.3.1
 - 🧊 **Frosted-glass bottom navigation** — full-width bar that blurs the content behind it (Android 12+; translucent on older devices).
 - 🎨 Blue-tinted download buttons to match the theme.
