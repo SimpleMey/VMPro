@@ -21,6 +21,8 @@ private val DarkColors = darkColorScheme(
     surfaceVariant = Color(0xFF1E2530),
     primaryContainer = Color(0xFF13315C),
     onPrimaryContainer = Color(0xFFD6E7FF),
+    secondaryContainer = Color(0xFF1B3A5C),
+    onSecondaryContainer = Color(0xFFCFE3FF),
 )
 
 // Light scheme with a grey backdrop so white cards/top bar/nav actually stand out.
@@ -37,6 +39,8 @@ private val LightColors = lightColorScheme(
     onSurfaceVariant = Color(0xFF48525C),
     primaryContainer = Color(0xFFD6E7FF),
     onPrimaryContainer = Color(0xFF0A2A50),
+    secondaryContainer = Color(0xFFDCEBFF),
+    onSecondaryContainer = Color(0xFF0A2A50),
     outline = Color(0xFFC3CBD4),
 )
 

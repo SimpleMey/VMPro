@@ -8,6 +8,10 @@
 # --- PostHog analytics SDK (ships its own consumer rules; silence optional deps) ---
 -dontwarn com.posthog.**
 
+# --- Haze (frosted-glass) — defensive keep + silence ---
+-keep class dev.chrisbanes.haze.** { *; }
+-dontwarn dev.chrisbanes.haze.**
+
 # --- AndroidX Lifecycle: keep the Compose CompositionLocal providers so R8 doesn't strip
 # LocalLifecycleOwner (defensive; also fixed by lifecycle 2.8.3+). ---
 -keep class androidx.lifecycle.compose.** { *; }

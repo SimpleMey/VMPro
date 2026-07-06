@@ -30,8 +30,8 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 43
-        versionName = "4.3"
+        versionCode = 44
+        versionName = "4.3.1"
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
@@ -111,6 +111,10 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Background blur ("frosted glass") for the bottom bar — 0.7.3 targets Compose 1.6 /
+    // Kotlin 1.9; blurs on Android 12+, degrades to the tint on older devices.
+    implementation("dev.chrisbanes.haze:haze:0.7.3")
 
     // Product analytics (open-source, self-hostable; generous free tier).
     // Pinned to 3.35.0 — the last release built with Kotlin 1.8/1.9 metadata that our

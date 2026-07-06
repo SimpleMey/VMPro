@@ -8,7 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,6 +97,10 @@ import com.vmpro.app.ui.TabState
 import com.vmpro.app.ui.ThemePrefs
 import com.vmpro.app.ui.VmproTheme
 import androidx.core.view.WindowCompat
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
 import com.vmpro.app.R
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadPhase
@@ -201,6 +207,7 @@ fun ManagerScreen(
     val updateVersion by viewModel.updateVersion.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val state = states[selectedTab] ?: TabState.Loading
+    val hazeState = remember { HazeState() }
 
     // Re-check installed apps whenever the user returns to the app.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -253,26 +260,52 @@ fun ManagerScreen(
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = Color.Transparent,
-                tonalElevation = 0.dp,
+            // Full-width frosted-glass bar: blurs the list behind it (Android 12+),
+            // falls back to the tint on older devices.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .hazeChild(state = hazeState),
             ) {
-                NAV_DESTS.forEach { dest ->
-                    NavigationBarItem(
-                        selected = selectedTab == dest.tab,
-                        onClick = { viewModel.selectTab(dest.tab) },
-                        icon = { Icon(dest.icon, contentDescription = TAB_TITLES[dest.tab]) },
-                        label = { Text(TAB_TITLES[dest.tab]) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                            indicatorColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp,
+                ) {
+                    NAV_DESTS.forEach { dest ->
+                        NavigationBarItem(
+                            selected = selectedTab == dest.tab,
+                            onClick = { viewModel.selectTab(dest.tab) },
+                            icon = { Icon(dest.icon, contentDescription = TAB_TITLES[dest.tab]) },
+                            label = { Text(TAB_TITLES[dest.tab]) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
                 }
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                )
             }
         },
     ) { padding ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .haze(
+                    state = hazeState,
+                    style = HazeStyle(
+                        tint = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        blurRadius = 22.dp,
+                    ),
+                ),
+        ) {
         when (val s = state) {
             is TabState.Loading -> CenterBox(padding) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -301,6 +334,7 @@ fun ManagerScreen(
                     computeMicrogSwitch(s.sections, installed)
                 } else null,
             )
+        }
         }
     }
 
