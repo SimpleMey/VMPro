@@ -22,3 +22,6 @@
 # JVM crash dumps
 hs_err_pid*.log
 replay_pid*.log
+
+# Local Claude Code / preview tooling (not part of the app)
+/.claude/
