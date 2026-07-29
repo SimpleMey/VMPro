@@ -31,9 +31,11 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.outlined.Info
@@ -75,8 +77,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -89,6 +94,7 @@ import com.vmpro.app.ui.CatalogItem
 import com.vmpro.app.ui.InstalledApp
 import com.vmpro.app.ui.ManagerViewModel
 import com.vmpro.app.ui.Section
+import com.vmpro.app.ui.SharePrompt
 import com.vmpro.app.ui.TAB_APPS
 import com.vmpro.app.ui.TAB_MICROG
 import com.vmpro.app.ui.TAB_MODULES
@@ -102,6 +108,7 @@ import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 import com.vmpro.app.R
+import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadPhase
 
@@ -141,16 +148,126 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun App(isDark: Boolean, onToggleTheme: () -> Unit) {
+    val context = LocalContext.current
     var showAbout by remember { mutableStateOf(false) }
+    var showShareExit by remember { mutableStateOf(false) }
+
     if (showAbout) {
         BackHandler { showAbout = false }
         AboutScreen(onBack = { showAbout = false })
     } else {
+        // Intercept the exit back-press to nudge sharing — but only once per app version.
+        BackHandler(enabled = !showShareExit) {
+            if (SharePrompt.isDoneFor(context, BuildConfig.VERSION_NAME)) {
+                (context as? Activity)?.finish()
+            } else {
+                showShareExit = true
+            }
+        }
         ManagerScreen(
             onOpenAbout = { showAbout = true },
             isDark = isDark,
             onToggleTheme = onToggleTheme,
         )
+    }
+
+    if (showShareExit) {
+        ShareExitDialog(
+            onShare = {
+                Analytics.appShared()
+                Downloader.shareApk(context)
+                SharePrompt.markDone(context, BuildConfig.VERSION_NAME)
+                showShareExit = false
+            },
+            onAlreadyShared = {
+                SharePrompt.markDone(context, BuildConfig.VERSION_NAME)
+                showShareExit = false
+                (context as? Activity)?.finish()
+            },
+            onClose = {
+                showShareExit = false
+                (context as? Activity)?.finish()
+            },
+        )
+    }
+}
+
+/**
+ * Shown when the user tries to exit: a gentle nudge to share the APK with a friend.
+ * "X" / back closes the app (asks again next launch); "Share" opens the share sheet and
+ * stops asking for this version; "Already shared" stops asking and closes the app. The
+ * "stop asking" state re-arms after every app update (see [SharePrompt]).
+ */
+@Composable
+private fun ShareExitDialog(
+    onShare: () -> Unit,
+    onAlreadyShared: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(dismissOnClickOutside = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Box {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_vmpro_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Share VMPro",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Enjoying VMPro? Send the app to a friend so they can grab the " +
+                            "latest builds too.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = onShare,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share")
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = onAlreadyShared, modifier = Modifier.fillMaxWidth()) {
+                        Text("Already shared")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -203,6 +320,7 @@ fun ManagerScreen(
     val phases by viewModel.downloadPhases.collectAsStateWithLifecycle()
     val progress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val installed by viewModel.installed.collectAsStateWithLifecycle()
+    val installedPatches by viewModel.installedPatches.collectAsStateWithLifecycle()
     val conflict by viewModel.conflict.collectAsStateWithLifecycle()
     val updateVersion by viewModel.updateVersion.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -255,7 +373,13 @@ fun ManagerScreen(
                     ),
                 )
                 updateVersion?.let { v ->
-                    UpdateBanner(version = v, onUpdate = { Downloader.openUrl(context, "https://vmpro.app") })
+                    UpdateBanner(
+                        version = v,
+                        onUpdate = {
+                            Analytics.updateBannerClicked()
+                            Downloader.openUrl(context, "https://vmpro.app")
+                        },
+                    )
                 }
             }
         },
@@ -325,6 +449,7 @@ fun ManagerScreen(
                 phases = phases,
                 progress = progress,
                 installed = installed,
+                installedPatches = installedPatches,
                 onAction = viewModel::onAction,
                 notice = if (selectedTab == TAB_MICROG) {
                     "Only one MicroG can be installed at a time — GmsCore and MicroG RE " +
@@ -379,6 +504,7 @@ private fun SectionList(
     phases: Map<String, DownloadPhase>,
     progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
+    installedPatches: Map<String, String>,
     onAction: (CatalogItem) -> Unit,
     notice: String? = null,
     switch: MicrogSwitch? = null,
@@ -406,7 +532,7 @@ private fun SectionList(
                 count = section.items.size,
                 key = { i -> "s${si}_$i" },
             ) { i ->
-                AppRow(section.items[i], phases, progress, installed, onAction)
+                AppRow(section.items[i], phases, progress, installed, installedPatches, onAction)
             }
         }
     }
@@ -527,18 +653,64 @@ private fun SectionHeader(section: Section) {
     }
 }
 
+/**
+ * Whether the available build is newer than what's installed.
+ *
+ * A newer base app version is always an update. When the base version matches, we fall back
+ * to the patch version: Android can't report the installed patch, so we compare the latest
+ * available patch against the one VMPro recorded at install time (trusted only while its
+ * base version still matches the installed one).
+ */
+private fun isUpdatable(
+    item: CatalogItem,
+    installedApp: InstalledApp?,
+    installedPatches: Map<String, String>,
+): Boolean {
+    if (installedApp == null || item.asset == null) return false
+    val details = item.details ?: return false
+    val available = details.version
+    if (isNewerVersion(available, installedApp.versionName)) return true
+
+    // Same base version — look for a newer patch-only build we previously installed.
+    if (available != installedApp.versionName) return false
+    val availablePatch = details.patch ?: return false
+    val raw = installedPatches[installedApp.packageName] ?: return false
+    val sep = raw.indexOf('|')
+    if (sep <= 0) return false
+    val storedBase = raw.substring(0, sep)
+    val storedPatch = raw.substring(sep + 1)
+    return storedBase == installedApp.versionName && isNewerVersion(availablePatch, storedPatch)
+}
+
+/**
+ * Resolve the installed app for a row, disambiguating shared-package items.
+ *
+ * GmsCore and MicroG RE install under one package id, so a plain package lookup makes every
+ * shared row read the *other* product's version — e.g. GmsCore showing "Installed 6.14",
+ * which is actually MicroG RE. We tell them apart by major-version family (GmsCore ships 0.x,
+ * MicroG RE ships 6.x): the row counts as installed only when the installed major matches its
+ * own available major. Non-exclusive rows keep the plain package match.
+ */
+private fun resolveInstalled(item: CatalogItem, installed: Map<String, InstalledApp>): InstalledApp? {
+    val found = item.packages.firstNotNullOfOrNull { installed[it] } ?: return null
+    if (!item.exclusive) return found
+    val availableMajor = item.details?.version?.substringBefore('.')?.toIntOrNull() ?: return null
+    val installedMajor = found.versionName.substringBefore('.').toIntOrNull()
+    return if (installedMajor == availableMajor) found else null
+}
+
 @Composable
 private fun AppRow(
     item: CatalogItem,
     phases: Map<String, DownloadPhase>,
     progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
+    installedPatches: Map<String, String>,
     onAction: (CatalogItem) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val installedApp = item.packages.firstNotNullOfOrNull { installed[it] }
-    val updatable = installedApp != null && item.asset != null &&
-        isNewerVersion(item.details?.version, installedApp.versionName)
+    val installedApp = resolveInstalled(item, installed)
+    val updatable = isUpdatable(item, installedApp, installedPatches)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -568,15 +740,6 @@ private fun AppRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    // Exclusive items can't show a terminal "Installed" button (shared package),
-                    // so surface the installed state as a small badge instead.
-                    if (item.exclusive && installedApp != null) {
-                        Text(
-                            "● Installed ${installedApp.versionName}".trim(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
                 }
                 Spacer(Modifier.width(8.dp))
                 StateButton(item, phases, progress, installedApp, updatable, onAction)
@@ -681,7 +844,8 @@ private fun StateButton(
     val phase = phases[asset.downloadUrl] ?: DownloadPhase.IDLE
     // Installed at the available version (or newer) — takes priority over a stale download
     // so the button flips to "Installed" as soon as the app is detected on the device.
-    val installedCurrent = !item.exclusive && asset.isApk && installedApp != null && !updatable
+    // (installedApp is already disambiguated for shared-package items by resolveInstalled.)
+    val installedCurrent = asset.isApk && installedApp != null && !updatable
     when {
         phase == DownloadPhase.DOWNLOADING -> FilledTonalButton(
             onClick = {},
@@ -708,7 +872,7 @@ private fun StateButton(
             FilledTonalButton(onClick = {}, enabled = false) { Text("Downloaded") }
 
         // Installed but a newer build is available.
-        !item.exclusive && asset.isApk && installedApp != null && updatable ->
+        asset.isApk && installedApp != null && updatable ->
             Button(
                 onClick = { onAction(item) },
                 colors = ButtonDefaults.buttonColors(

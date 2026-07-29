@@ -6,6 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.core.content.FileProvider
+import com.vmpro.app.BuildConfig
+import java.io.File
 
 /** Lightweight system actions (open URL, uninstall). Downloads go through DownloadController. */
 object Downloader {
@@ -16,6 +19,33 @@ object Downloader {
             context.startActivity(
                 Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
+        }
+    }
+
+    /**
+     * Share VMPro's own APK file via the system share sheet (WhatsApp/Telegram/etc. send
+     * it as an installable attachment). Copies the installed APK to a cache dir and exposes
+     * it through the app's FileProvider.
+     */
+    fun shareApk(context: Context) {
+        runCatching {
+            val src = File(context.applicationInfo.sourceDir)
+            val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+            val dest = File(dir, "VMPro-${BuildConfig.VERSION_NAME}.apk")
+            src.copyTo(dest, overwrite = true)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", dest)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TEXT, "VMPro — get it at https://vmpro.app")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(
+                Intent.createChooser(send, "Share VMPro").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            Toast.makeText(context, "Couldn't share the app", Toast.LENGTH_SHORT).show()
         }
     }
 

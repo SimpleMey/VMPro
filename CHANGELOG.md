@@ -2,6 +2,11 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.3.3
+- **Share VMPro** — send the app (APK) to a friend via WhatsApp, Telegram, etc., from the About page or the share prompt when you leave the app.
+- **Patch-only updates** — an Update now shows when only the ReVanced/Morphe patch version changes, even if the base app version is the same.
+- **MicroG fixes** — GmsCore and MicroG RE now correctly show which one is actually installed (no more wrong "Installed" version), and the installed one shows **Installed** instead of Download.
+
 ## v4.3.2
 - Maintenance release — no user-facing changes.
 

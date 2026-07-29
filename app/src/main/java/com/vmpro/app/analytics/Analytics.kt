@@ -31,7 +31,9 @@ object Analytics {
         if (apiKey.isBlank()) return
         runCatching {
             val config = PostHogAndroidConfig(apiKey = apiKey, host = host).apply {
-                captureApplicationLifecycleEvents = true   // "Application Opened" -> active users
+                // We send our own "app_open" (with is_returning) instead, so active users
+                // and new-vs-returning both come from one clean event.
+                captureApplicationLifecycleEvents = false
                 captureScreenViews = false
                 captureDeepLinks = false
                 sessionReplay = false
@@ -39,6 +41,9 @@ object Analytics {
             PostHogAndroid.setup(context.applicationContext, config)
         }.onFailure { Log.w("Analytics", "PostHog init failed", it) }
     }
+
+    /** Fire once per launch. [isReturning] = false on the very first launch, true after. */
+    fun appOpen(isReturning: Boolean) = event("app_open", mapOf("is_returning" to isReturning))
 
     fun event(name: String, props: Map<String, Any> = emptyMap()) {
         runCatching { PostHog.capture(event = name, properties = props) }
@@ -57,4 +62,8 @@ object Analytics {
     fun downloadFailed(file: String) = event("download_failed", mapOf("file" to file))
 
     fun installClicked(file: String) = event("install_clicked", mapOf("file" to file))
+
+    fun updateBannerClicked() = event("update_banner_clicked")
+
+    fun appShared() = event("app_shared")
 }

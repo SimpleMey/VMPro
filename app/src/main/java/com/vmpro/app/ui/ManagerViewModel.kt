@@ -10,6 +10,7 @@ import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.data.APP_CATALOG
 import com.vmpro.app.data.Asset
 import com.vmpro.app.data.GithubRepository
+import com.vmpro.app.data.InstalledPatchStore
 import com.vmpro.app.data.J_HC
 import com.vmpro.app.data.MICROG_CATALOG
 import com.vmpro.app.data.Project
@@ -89,6 +90,14 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     private val _installed = MutableStateFlow<Map<String, InstalledApp>>(emptyMap())
     val installed: StateFlow<Map<String, InstalledApp>> = _installed.asStateFlow()
 
+    /**
+     * pkg -> "baseVersion|patchVersion" for builds VMPro installed. Lets the UI detect a
+     * patch-only update (same base app version, newer ReVanced patches), which Android's
+     * PackageManager can't reveal on its own. Seeded from disk, updated on each install.
+     */
+    private val _installedPatches = MutableStateFlow(InstalledPatchStore.all(app))
+    val installedPatches: StateFlow<Map<String, String>> = _installedPatches.asStateFlow()
+
     /** Non-null while a same-package install conflict is awaiting the user's choice. */
     private val _conflict = MutableStateFlow<ConflictInfo?>(null)
     val conflict: StateFlow<ConflictInfo?> = _conflict.asStateFlow()
@@ -156,8 +165,23 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         if (item.exclusive && installedPkg != null) {
             _conflict.value = ConflictInfo(installedPkg, asset, item.label)
         } else {
+            recordPatch(item)
             downloads.install(asset)
         }
+    }
+
+    /**
+     * Remember the patch version we're about to install for this item's package, so a later
+     * patch-only release is recognised as an update. Recorded at install-launch (we get no
+     * success callback from the system installer); harmless if the user cancels — the next
+     * real install corrects it.
+     */
+    private fun recordPatch(item: CatalogItem) {
+        val pkg = item.packages.firstOrNull() ?: return
+        val base = item.details?.version ?: return
+        val patch = item.details?.patch ?: return
+        InstalledPatchStore.record(getApplication(), pkg, base, patch)
+        _installedPatches.update { it + (pkg to "$base|$patch") }
     }
 
     fun uninstallConflict() {

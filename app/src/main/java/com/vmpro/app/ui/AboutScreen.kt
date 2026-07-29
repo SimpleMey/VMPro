@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +39,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.vmpro.app.R
+import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.data.SOURCES
 import com.vmpro.app.data.Source
 import com.vmpro.app.util.Downloader
@@ -84,7 +86,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                "Version 4.3.2",
+                "Version 4.3.3",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
@@ -105,6 +107,7 @@ fun AboutScreen(onBack: () -> Unit) {
             WebsiteCard()
             GitHubCard()
             TelegramCard()
+            ShareCard()
 
             Text(
                 "Sources",
@@ -161,6 +164,43 @@ private fun WebsiteCard() {
                 contentDescription = "Open website",
                 tint = MaterialTheme.colorScheme.primary,
             )
+        }
+    }
+}
+
+@Composable
+private fun ShareCard() {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                Analytics.appShared()
+                Downloader.shareApk(context)
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Share,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Share VMPro", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Send the app (APK) to a friend",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
         }
     }
 }
