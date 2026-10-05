@@ -2,6 +2,14 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.4.0
+- **Android TV support**: VMPro now runs on Android TV with full D-pad navigation and appears on the TV home screen.
+- **TV apps**: a new TV tab with SmartTube and TizenTube (Cobalt), taken straight from their GitHub releases.
+- **Reorganised navigation**: the bottom bar is now Phone and TV, and Apps, MicroG, and Modules moved to tabs inside Phone.
+- **NewTube** added under the Phone apps.
+- **MicroG** now uses stable releases, and updating the MicroG you already have no longer asks you to switch.
+- **Refreshed icons** for several apps, and each app's details now list its patches (for example Morphe).
+
 ## v4.3.3
 - **Share VMPro** — send the app (APK) to a friend via WhatsApp, Telegram, etc., from the About page or the share prompt when you leave the app.
 - **Patch-only updates** — an Update now shows when only the ReVanced/Morphe patch version changes, even if the base app version is the same.

@@ -16,7 +16,25 @@ data class Source(
  */
 val SOURCES: List<Source> = listOf(
     Source(
-        title = "ReVanced builds & modules",
+        title = "Morphe APKs (auto-built)",
+        subtitle = "SimpleMey / Morphe-Builds",
+        owner = "SimpleMey",
+        repo = "Morphe-Builds",
+    ),
+    Source(
+        title = "Morphe patches",
+        subtitle = "MorpheApp / morphe-patches",
+        owner = "MorpheApp",
+        repo = "morphe-patches",
+    ),
+    Source(
+        title = "Piko (X) patches",
+        subtitle = "crimera / piko-newx",
+        owner = "crimera",
+        repo = "piko-newx",
+    ),
+    Source(
+        title = "Magisk / KernelSU modules",
         subtitle = "j-hc / revanced-magisk-module",
         owner = "j-hc",
         repo = "revanced-magisk-module",
@@ -32,5 +50,17 @@ val SOURCES: List<Source> = listOf(
         subtitle = "MorpheApp / MicroG-RE",
         owner = "MorpheApp",
         repo = "MicroG-RE",
+    ),
+    Source(
+        title = "SmartTube · Android TV",
+        subtitle = "yuliskov / SmartTube",
+        owner = "yuliskov",
+        repo = "SmartTube",
+    ),
+    Source(
+        title = "TizenTube Cobalt · Android TV",
+        subtitle = "reisxd / TizenTubeCobalt",
+        owner = "reisxd",
+        repo = "TizenTubeCobalt",
     ),
 )

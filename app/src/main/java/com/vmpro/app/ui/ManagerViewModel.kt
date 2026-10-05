@@ -13,11 +13,16 @@ import com.vmpro.app.data.GithubRepository
 import com.vmpro.app.data.InstalledPatchStore
 import com.vmpro.app.data.J_HC
 import com.vmpro.app.data.MICROG_CATALOG
-import com.vmpro.app.data.Project
+import com.vmpro.app.data.MODULE_CATALOG
+import com.vmpro.app.data.MORPHE_BUILDS
+import com.vmpro.app.data.MorpheBuilds
+import com.vmpro.app.data.PHONE_DIRECT
 import com.vmpro.app.data.Release
+import com.vmpro.app.data.TV_CATALOG
 import com.vmpro.app.data.formatBytes
 import com.vmpro.app.data.isNewerVersion
 import com.vmpro.app.data.parsePatchVersion
+import com.vmpro.app.data.sameVersionFamily
 import com.vmpro.app.data.versionOf
 import com.vmpro.app.util.DownloadController
 import com.vmpro.app.util.DownloadPhase
@@ -28,10 +33,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+// Inner tabs shown inside the "Apps" bottom destination.
 const val TAB_APPS = 0
 const val TAB_MICROG = 1
 const val TAB_MODULES = 2
 val TAB_TITLES = listOf("Apps", "MicroG", "Modules")
+
+// Separate bottom destination.
+const val TAB_TV = 3
 
 /** Extra info shown in a row's expandable dropdown. */
 data class AppDetails(
@@ -40,6 +49,8 @@ data class AppDetails(
     val compiledBy: String,
     val size: String,
     val lastUpdated: String?,
+    /** Patch brand shown in the Apps tab (e.g. "Morphe", "Piko"); null elsewhere. */
+    val patches: String? = null,
 )
 
 /** A single resolved row: an app/module and the file to download (if any). */
@@ -92,7 +103,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * pkg -> "baseVersion|patchVersion" for builds VMPro installed. Lets the UI detect a
-     * patch-only update (same base app version, newer ReVanced patches), which Android's
+     * patch-only update (same base app version, newer patches), which Android's
      * PackageManager can't reveal on its own. Seeded from disk, updated on each install.
      */
     private val _installedPatches = MutableStateFlow(InstalledPatchStore.all(app))
@@ -108,18 +119,21 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
             MICROG_CATALOG.mapNotNull { it.packages.firstOrNull() })
             .groupingBy { it }.eachCount().filterValues { it > 1 }.keys
 
+    private var morpheBuilds: MorpheBuilds? = null
     private var jhcReleases: List<Release>? = null
 
-    /** Newer VMPro version string (e.g. "4.3") when an app update is available, else null. */
+    /** Newer VMPro version string (e.g. "4.4") when an app update is available, else null. */
     private val _updateVersion = MutableStateFlow<String?>(null)
     val updateVersion: StateFlow<String?> = _updateVersion.asStateFlow()
 
     init {
         refreshInstalled()
-        Analytics.tabView(TAB_TITLES[TAB_APPS])
+        Analytics.tabView(titleFor(TAB_APPS))
         load(TAB_APPS)
         checkForUpdate()
     }
+
+    private fun titleFor(index: Int) = if (index == TAB_TV) "TV" else TAB_TITLES[index]
 
     /** Compare the latest VMPro release on GitHub against this build's version. */
     private fun checkForUpdate() {
@@ -135,13 +149,16 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectTab(index: Int) {
-        if (_selectedTab.value != index) Analytics.tabView(TAB_TITLES[index])
+        if (_selectedTab.value != index) Analytics.tabView(titleFor(index))
         _selectedTab.value = index
         if (_states.value[index] !is TabState.Success) load(index)
     }
 
     fun refresh() {
-        if (_selectedTab.value != TAB_MICROG) jhcReleases = null
+        when (_selectedTab.value) {
+            TAB_APPS -> morpheBuilds = null
+            TAB_MODULES -> jhcReleases = null
+        }
         refreshInstalled()
         load(_selectedTab.value)
     }
@@ -158,12 +175,16 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Install, but if a conflicting same-package app is present, ask the user first. */
+    /** Install, but if installing would replace the *other* app sharing this package, ask first. */
     private fun attemptInstall(item: CatalogItem) {
         val asset = item.asset ?: return
         val installedPkg = item.packages.firstOrNull { _installed.value.containsKey(it) }
-        if (item.exclusive && installedPkg != null) {
-            _conflict.value = ConflictInfo(installedPkg, asset, item.label)
+        // Only a real switch between the two products sharing this package (GmsCore <-> MicroG RE)
+        // is a conflict. Updating the same product in place is not — Android just updates it.
+        val switchingProduct = item.exclusive && installedPkg != null &&
+            !sameVersionFamily(item.details?.version, _installed.value[installedPkg]?.versionName)
+        if (switchingProduct) {
+            _conflict.value = ConflictInfo(installedPkg!!, asset, item.label)
         } else {
             recordPatch(item)
             downloads.install(asset)
@@ -200,8 +221,10 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Re-query PackageManager for every catalog package. Call on launch and on resume. */
     fun refreshInstalled() {
-        val all = (APP_CATALOG.flatMap { it.packages } + MICROG_CATALOG.flatMap { it.packages })
-            .distinct()
+        val all = (APP_CATALOG.flatMap { it.packages } +
+            MICROG_CATALOG.flatMap { it.packages } +
+            PHONE_DIRECT.flatMap { it.packages } +
+            TV_CATALOG.flatMap { it.packages }).distinct()
         val map = HashMap<String, InstalledApp>()
         for (pkg in all) {
             try {
@@ -218,10 +241,14 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         _states.update { it + (tab to TabState.Loading) }
         viewModelScope.launch {
             val state = try {
-                when (tab) {
-                    TAB_MICROG -> TabState.Success(loadMicroG())
-                    else -> TabState.Success(loadAppsOrModules(wantApk = tab == TAB_APPS))
-                }
+                TabState.Success(
+                    when (tab) {
+                        TAB_MICROG -> loadMicroG()
+                        TAB_MODULES -> loadModules()
+                        TAB_TV -> loadTv()
+                        else -> loadApps()
+                    }
+                )
             } catch (e: Exception) {
                 TabState.Error(e.message ?: "Failed to load.")
             }
@@ -229,37 +256,101 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun loadAppsOrModules(wantApk: Boolean): List<Section> {
-        val releases = jhcReleases ?: repository.fetchReleases(J_HC).also { jhcReleases = it }
-        return Project.entries.map { project ->
-            val items = APP_CATALOG.filter { it.project == project }.map { entry ->
-                val resolved = repository.resolveApp(releases, entry, wantApk)
-                val asset = resolved?.asset
-                val version = asset?.let { versionOf(it.name)?.removePrefix("v") }
-                val details = resolved?.let {
-                    AppDetails(
-                        version = version,
-                        patch = parsePatchVersion(it.release.body, entry.variant),
-                        compiledBy = J_HC.owner,
-                        size = formatBytes(it.asset.sizeBytes),
-                        lastUpdated = it.release.publishedAt.ifBlank { null },
-                    )
-                }
-                val packages = if (wantApk) entry.packages else emptyList()
-                CatalogItem(
-                    label = entry.label,
-                    iconRes = entry.iconRes,
-                    asset = asset,
-                    subtitle = subtitleFor(asset, version, wantApk),
-                    details = details,
-                    packages = packages,
-                    exclusive = packages.firstOrNull() in sharedPackages,
+    /** Apps tab — Morphe auto-builds (manifest) plus direct-from-GitHub phone apps (NewTube). */
+    private suspend fun loadApps(): List<Section> {
+        val builds = morpheBuilds
+            ?: repository.fetchMorpheBuilds(MORPHE_BUILDS).also { morpheBuilds = it }
+        val morpheItems = APP_CATALOG.map { entry ->
+            val resolved = repository.resolveMorphe(builds, entry.appName, entry.source)
+            val asset = resolved?.asset
+            val version = resolved?.version
+            val details = resolved?.let {
+                AppDetails(
+                    version = version,
+                    patch = null,
+                    compiledBy = "Morphe",
+                    size = formatBytes(it.asset.sizeBytes),
+                    lastUpdated = it.release.publishedAt.ifBlank { null },
+                    patches = patchBrandFor(entry.source),
                 )
             }
-            Section(project.label, project.iconRes, items)
+            CatalogItem(
+                label = entry.label,
+                iconRes = entry.iconRes,
+                asset = asset,
+                subtitle = subtitleFor(asset, version, "No APK available"),
+                details = details,
+                packages = entry.packages,
+                exclusive = entry.packages.firstOrNull() in sharedPackages,
+            )
         }
+        val directItems = PHONE_DIRECT.map { entry -> loadReleaseItem(entry) }
+        return listOf(Section(title = null, iconRes = null, items = morpheItems + directItems))
     }
 
+    /** Human patch-brand name for a Morphe-Builds source key. */
+    private fun patchBrandFor(source: String): String = when (source) {
+        "morphe" -> "Morphe"
+        "piko-newx", "piko" -> "Piko"
+        else -> source.replaceFirstChar { it.uppercase() }
+    }
+
+    /** Resolve one app straight from its own GitHub release (TV apps and direct phone apps). */
+    private suspend fun loadReleaseItem(entry: com.vmpro.app.data.TvEntry): CatalogItem {
+        val resolved = repository.resolveTv(entry)
+        val asset = resolved?.asset
+        val version = resolved?.release?.tag
+            ?.removePrefix("v")?.trimEnd('s')?.takeIf { it.isNotBlank() }
+        val details = resolved?.let {
+            AppDetails(
+                version = version,
+                patch = null,
+                compiledBy = entry.owner,
+                size = formatBytes(it.asset.sizeBytes),
+                lastUpdated = it.release.publishedAt.ifBlank { null },
+            )
+        }
+        return CatalogItem(
+            label = entry.label,
+            iconRes = entry.iconRes,
+            asset = asset,
+            subtitle = subtitleFor(asset, version, entry.subtitle),
+            details = details,
+            packages = entry.packages,
+            exclusive = false,
+        )
+    }
+
+    /** Modules tab — Magisk/KernelSU .zip modules, still from j-hc. */
+    private suspend fun loadModules(): List<Section> {
+        val releases = jhcReleases ?: repository.fetchReleases(J_HC).also { jhcReleases = it }
+        val items = MODULE_CATALOG.map { entry ->
+            val resolved = repository.resolveModule(releases, entry)
+            val asset = resolved?.asset
+            val version = asset?.let { versionOf(it.name)?.removePrefix("v") }
+            val details = resolved?.let {
+                AppDetails(
+                    version = version,
+                    patch = parsePatchVersion(it.release.body, entry.variant),
+                    compiledBy = J_HC.owner,
+                    size = formatBytes(it.asset.sizeBytes),
+                    lastUpdated = it.release.publishedAt.ifBlank { null },
+                )
+            }
+            CatalogItem(
+                label = entry.label,
+                iconRes = entry.iconRes,
+                asset = asset,
+                subtitle = subtitleFor(asset, version, "No module available"),
+                details = details,
+                packages = emptyList(),
+                exclusive = false,
+            )
+        }
+        return listOf(Section(title = null, iconRes = null, items = items))
+    }
+
+    /** MicroG tab — GmsCore + MicroG RE from their own repos. */
     private suspend fun loadMicroG(): List<Section> {
         val items = MICROG_CATALOG.map { entry ->
             val resolved = repository.resolveMicroG(entry)
@@ -279,7 +370,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                 label = entry.label,
                 iconRes = entry.iconRes,
                 asset = asset,
-                subtitle = subtitleFor(asset, version, wantApk = true),
+                subtitle = subtitleFor(asset, version, "No APK available"),
                 details = details,
                 packages = entry.packages,
                 exclusive = entry.packages.firstOrNull() in sharedPackages,
@@ -288,8 +379,14 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(Section(title = null, iconRes = null, items = items))
     }
 
-    private fun subtitleFor(asset: Asset?, version: String?, wantApk: Boolean): String {
-        if (asset == null) return if (wantApk) "No APK available" else "No module available"
+    /** TV tab — Android TV apps from their own GitHub release pages. */
+    private suspend fun loadTv(): List<Section> {
+        val items = TV_CATALOG.map { entry -> loadReleaseItem(entry) }
+        return listOf(Section(title = null, iconRes = null, items = items))
+    }
+
+    private fun subtitleFor(asset: Asset?, version: String?, emptyLabel: String): String {
+        if (asset == null) return emptyLabel
         val v = version?.let { "$it · " } ?: ""
         return "$v${formatBytes(asset.sizeBytes)}"
     }

@@ -3,28 +3,73 @@ package com.vmpro.app.data
 import androidx.annotation.DrawableRes
 import com.vmpro.app.R
 
-/** The patch project an app build is based on (used as a section heading). */
-enum class Project(val label: String, @DrawableRes val iconRes: Int) {
-    MORPHE("Morphe", R.drawable.ic_morphe),
-    REVANCED("ReVanced", R.drawable.ic_revanced),
-}
+// ---------------------------------------------------------------------------------------------
+// Apps tab — non-root APKs, built by the user's Morphe auto-builder and resolved from the
+// manifest.json published in its single `latest` release.
+// ---------------------------------------------------------------------------------------------
+
+/** The user's Morphe auto-build repository (publishes one `latest` release + manifest.json). */
+val MORPHE_BUILDS = Source(
+    title = "Morphe APKs (auto-built)",
+    subtitle = "SimpleMey / Morphe-Builds",
+    owner = "SimpleMey",
+    repo = "Morphe-Builds",
+)
 
 /**
- * One curated app in the Apps / Modules tabs. Its files are resolved from the latest
- * matching release of [J_HC] (j-hc/revanced-magisk-module).
- *
- * Asset names look like `youtube-morphe-v20.51.39-all.apk` or
- * `music-revanced-module-v8.40.54-arm64-v8a.zip`, i.e. `{appKey}-{variant}-...`.
+ * One app in the Apps tab. Resolved from Morphe-Builds' manifest by matching
+ * `app_name` + `source`; the best available architecture is chosen automatically.
  */
-data class AppEntry(
+data class MorpheApp(
     val label: String,
     @DrawableRes val iconRes: Int,
-    val project: Project,
-    val appKey: String,
-    val variant: String,
-    /** Candidate installed package ids (renamed non-root builds) for install detection. */
+    val appName: String,
+    val source: String,
     val packages: List<String> = emptyList(),
 )
+
+val APP_CATALOG: List<MorpheApp> = listOf(
+    MorpheApp("YouTube", R.drawable.ic_youtube, "youtube", "morphe", listOf("app.morphe.android.youtube")),
+    MorpheApp("YT Music", R.drawable.ic_ytmusic, "youtube-music", "morphe", listOf("app.morphe.android.apps.youtube.music")),
+    MorpheApp("Twitter", R.drawable.ic_twitter, "x-new", "piko-newx", listOf("com.twitter.android")),
+    MorpheApp("Reddit", R.drawable.ic_reddit, "reddit", "morphe", listOf("com.reddit.frontpage")),
+)
+
+/** Preferred architecture order when the manifest has several builds of one app. */
+val ARCH_PREFERENCE = listOf("arm64-v8a", "universal", "armeabi-v7a", "arm-v7a", "x86_64", "x86")
+
+// ---------------------------------------------------------------------------------------------
+// Modules tab — Magisk/KernelSU .zip modules, still built by j-hc (Morphe-Builds is APK-only).
+// ---------------------------------------------------------------------------------------------
+
+val J_HC = Source(
+    title = "ReVanced Modules",
+    subtitle = "j-hc / revanced-magisk-module",
+    owner = "j-hc",
+    repo = "revanced-magisk-module",
+)
+
+/** One module in the Modules tab, resolved from the latest j-hc release (`.zip`). */
+data class ModuleEntry(
+    val label: String,
+    @DrawableRes val iconRes: Int,
+    val appKey: String,
+    val variant: String,
+)
+
+val MODULE_CATALOG: List<ModuleEntry> = listOf(
+    ModuleEntry("YouTube", R.drawable.ic_youtube, "youtube", "morphe"),
+    ModuleEntry("YT Music", R.drawable.ic_ytmusic, "music", "morphe"),
+    ModuleEntry("Twitter", R.drawable.ic_twitter, "twitter", "piko"),
+    ModuleEntry("Reddit", R.drawable.ic_reddit, "reddit", "morphe"),
+)
+
+// ---------------------------------------------------------------------------------------------
+// MicroG tab — GmsCore (ReVanced) and MicroG RE (Morphe) share one package; only one installs.
+// ---------------------------------------------------------------------------------------------
+
+/** GmsCore (ReVanced) and MicroG RE (Morphe) ship under the same package id — only one installs. */
+const val GMS_PACKAGE = "app.revanced.android.gms"
 
 /** A MicroG-tab entry resolved from the latest release of its own repository. */
 data class MicroGEntry(
@@ -39,32 +84,6 @@ data class MicroGEntry(
     val avoid: String? = null,
 )
 
-val J_HC = Source(
-    title = "ReVanced Modules",
-    subtitle = "j-hc / revanced-magisk-module",
-    owner = "j-hc",
-    repo = "revanced-magisk-module",
-)
-
-private val YT_REVANCED = listOf("app.revanced.android.youtube")
-private val YTM_REVANCED = listOf("app.revanced.android.apps.youtube.music")
-private val YT_MORPHE = listOf("app.morphe.android.youtube")
-private val YTM_MORPHE = listOf("app.morphe.android.apps.youtube.music")
-
-/** GmsCore (ReVanced) and MicroG RE (Morphe) ship under the same package id — only one installs. */
-const val GMS_PACKAGE = "app.revanced.android.gms"
-
-val APP_CATALOG: List<AppEntry> = listOf(
-    // Morphe-based builds
-    AppEntry("Twitter", R.drawable.ic_twitter, Project.MORPHE, "twitter", "piko", listOf("com.twitter.android")),
-    AppEntry("YouTube", R.drawable.ic_youtube, Project.MORPHE, "youtube", "morphe", YT_MORPHE),
-    AppEntry("YT Music", R.drawable.ic_ytmusic, Project.MORPHE, "music", "morphe", YTM_MORPHE),
-    AppEntry("Reddit", R.drawable.ic_reddit, Project.MORPHE, "reddit", "morphe", listOf("com.reddit.frontpage")),
-    // ReVanced-based builds
-    AppEntry("YouTube", R.drawable.ic_youtube, Project.REVANCED, "youtube", "revanced", YT_REVANCED),
-    AppEntry("YT Music", R.drawable.ic_ytmusic, Project.REVANCED, "music", "revanced", YTM_REVANCED),
-)
-
 val MICROG_CATALOG: List<MicroGEntry> = listOf(
     MicroGEntry(
         "GmsCore", R.drawable.ic_gmscore, "ReVanced", "GmsCore",
@@ -75,6 +94,53 @@ val MICROG_CATALOG: List<MicroGEntry> = listOf(
         packages = listOf(GMS_PACKAGE),
     ),
 )
+
+// ---------------------------------------------------------------------------------------------
+// TV tab — Android TV apps, taken straight from their own GitHub release pages.
+// ---------------------------------------------------------------------------------------------
+
+/** An Android TV app, resolved from the latest release of [owner]/[repo]. */
+data class TvEntry(
+    val label: String,
+    val subtitle: String,
+    @DrawableRes val iconRes: Int,
+    val owner: String,
+    val repo: String,
+    /** Match tokens against APK names, first hit wins (falls back to the first APK). */
+    val archPreference: List<String>,
+    val packages: List<String> = emptyList(),
+)
+
+val TV_CATALOG: List<TvEntry> = listOf(
+    TvEntry(
+        "SmartTube", "YouTube for Android TV", R.drawable.ic_smarttube,
+        owner = "yuliskov", repo = "SmartTube",
+        archPreference = listOf("arm64-v8a", "universal", "armeabi-v7a"),
+        packages = listOf("org.smarttube.stable", "app.smarttube", "com.teamsmart.videomanager.tv"),
+    ),
+    TvEntry(
+        "TizenTube (Cobalt)", "YouTube (Cobalt) for Android TV", R.drawable.ic_tizentube,
+        owner = "reisxd", repo = "TizenTubeCobalt",
+        archPreference = listOf("arm64", "arm"),
+    ),
+)
+
+/**
+ * Phone apps taken straight from their own GitHub releases (not the Morphe-Builds manifest).
+ * Shown in the Apps tab alongside the Morphe builds, resolved with the same release logic as TV.
+ */
+val PHONE_DIRECT: List<TvEntry> = listOf(
+    TvEntry(
+        "NewTube", "YouTube client", R.drawable.ic_newtube,
+        owner = "aleixrodriala", repo = "newtube",
+        archPreference = listOf("arm64-v8a", "universal", "armeabi-v7a"),
+        packages = listOf("io.github.aleixrodriala.arc"),
+    ),
+)
+
+// ---------------------------------------------------------------------------------------------
+// Asset-name helpers (modules + version parsing).
+// ---------------------------------------------------------------------------------------------
 
 /** GitHub owner of the patch set for a build variant (used to read the patch version). */
 private fun patchOwnerFor(variant: String): String? = when (variant) {
@@ -91,16 +157,11 @@ fun parsePatchVersion(body: String, variant: String): String? {
         .find(body)?.groupValues?.get(1)
 }
 
-/** Preferred ABI order when a release ships per-architecture builds. */
-private val ARCH_PREFERENCE = listOf("arm64-v8a", "all", "arm-v7a", "armeabi-v7a", "x86_64", "x86")
-
-/** True when [name] is the asset for [entry] of the requested file type. */
-fun assetMatches(name: String, entry: AppEntry, wantApk: Boolean): Boolean {
+/** True when [name] is the j-hc module (`.zip`) asset for [appKey]/[variant]. */
+fun moduleMatches(name: String, appKey: String, variant: String): Boolean {
     val lower = name.lowercase()
-    if (!lower.startsWith("${entry.appKey}-${entry.variant}-")) return false
-    val isApk = lower.endsWith(".apk")
-    val isModule = lower.endsWith(".zip") && (lower.contains("-module-") || lower.contains("-magisk-"))
-    return if (wantApk) isApk else isModule
+    if (!lower.startsWith("${appKey}-${variant}-")) return false
+    return lower.endsWith(".zip") && (lower.contains("-module-") || lower.contains("-magisk-"))
 }
 
 /** Among same-release matches, pick the most broadly useful architecture. */

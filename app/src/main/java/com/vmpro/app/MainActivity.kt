@@ -1,6 +1,7 @@
 package com.vmpro.app
 
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -9,6 +10,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
@@ -34,10 +37,12 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,11 +63,14 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +79,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +100,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.DisposableEffect
 import com.vmpro.app.data.isNewerVersion
+import com.vmpro.app.data.sameVersionFamily
 import com.vmpro.app.ui.AboutScreen
 import com.vmpro.app.ui.CatalogItem
 import com.vmpro.app.ui.InstalledApp
@@ -99,6 +111,7 @@ import com.vmpro.app.ui.TAB_APPS
 import com.vmpro.app.ui.TAB_MICROG
 import com.vmpro.app.ui.TAB_MODULES
 import com.vmpro.app.ui.TAB_TITLES
+import com.vmpro.app.ui.TAB_TV
 import com.vmpro.app.ui.TabState
 import com.vmpro.app.ui.ThemePrefs
 import com.vmpro.app.ui.VmproTheme
@@ -271,12 +284,12 @@ private fun ShareExitDialog(
     }
 }
 
-private data class NavDest(val tab: Int, val icon: ImageVector)
+private data class NavDest(val tab: Int, val icon: ImageVector, val label: String)
 
-private val NAV_DESTS = listOf(
-    NavDest(TAB_APPS, Icons.Filled.Apps),
-    NavDest(TAB_MICROG, Icons.Filled.Security),
-    NavDest(TAB_MODULES, Icons.Filled.Extension),
+/** Top-level destinations in the bottom bar. "Phone" holds the inner Apps/MicroG/Modules tabs. */
+private val BOTTOM_DESTS = listOf(
+    NavDest(TAB_APPS, Icons.Filled.PhoneAndroid, "Phone"),
+    NavDest(TAB_TV, Icons.Filled.Tv, "TV"),
 )
 
 /** Suggests switching to the other MicroG when one is already installed. */
@@ -326,6 +339,13 @@ fun ManagerScreen(
     val context = LocalContext.current
     val state = states[selectedTab] ?: TabState.Loading
     val hazeState = remember { HazeState() }
+    // Remember which inner tab (Apps/MicroG/Modules) to return to from the TV destination.
+    var lastInner by remember { mutableStateOf(TAB_APPS) }
+    if (selectedTab != TAB_TV) lastInner = selectedTab
+    // On Android TV, drop initial focus into the list so the D-pad starts there (not on phones).
+    val isTvDevice = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    }
 
     // Re-check installed apps whenever the user returns to the app.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -381,6 +401,10 @@ fun ManagerScreen(
                         },
                     )
                 }
+                // Inner tabs live under the "Apps" destination only.
+                if (selectedTab != TAB_TV) {
+                    InnerTabs(selected = selectedTab, onSelect = { viewModel.selectTab(it) })
+                }
             }
         },
         bottomBar = {
@@ -395,12 +419,13 @@ fun ManagerScreen(
                     containerColor = Color.Transparent,
                     tonalElevation = 0.dp,
                 ) {
-                    NAV_DESTS.forEach { dest ->
+                    BOTTOM_DESTS.forEach { dest ->
+                        val isTv = dest.tab == TAB_TV
                         NavigationBarItem(
-                            selected = selectedTab == dest.tab,
-                            onClick = { viewModel.selectTab(dest.tab) },
-                            icon = { Icon(dest.icon, contentDescription = TAB_TITLES[dest.tab]) },
-                            label = { Text(TAB_TITLES[dest.tab]) },
+                            selected = if (isTv) selectedTab == TAB_TV else selectedTab != TAB_TV,
+                            onClick = { viewModel.selectTab(if (isTv) TAB_TV else lastInner) },
+                            icon = { Icon(dest.icon, contentDescription = dest.label) },
+                            label = { Text(dest.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.onPrimary,
                                 indicatorColor = MaterialTheme.colorScheme.primary,
@@ -450,6 +475,7 @@ fun ManagerScreen(
                 progress = progress,
                 installed = installed,
                 installedPatches = installedPatches,
+                requestInitialFocus = isTvDevice,
                 onAction = viewModel::onAction,
                 notice = if (selectedTab == TAB_MICROG) {
                     "Only one MicroG can be installed at a time — GmsCore and MicroG RE " +
@@ -505,12 +531,17 @@ private fun SectionList(
     progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
     installedPatches: Map<String, String>,
+    requestInitialFocus: Boolean = false,
     onAction: (CatalogItem) -> Unit,
     notice: String? = null,
     switch: MicrogSwitch? = null,
 ) {
+    val listFocus = remember { FocusRequester() }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRequester(listFocus)
+            .focusGroup(),
         contentPadding = PaddingValues(
             start = 12.dp, end = 12.dp,
             top = padding.calculateTopPadding() + 12.dp,
@@ -534,6 +565,37 @@ private fun SectionList(
             ) { i ->
                 AppRow(section.items[i], phases, progress, installed, installedPatches, onAction)
             }
+        }
+    }
+
+    // On TV, pull focus into the list once it's composed so the D-pad starts on a row.
+    if (requestInitialFocus) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(150)
+            runCatching { listFocus.requestFocus() }
+        }
+    }
+}
+
+@Composable
+private fun InnerTabs(selected: Int, onSelect: (Int) -> Unit) {
+    val index = selected.coerceIn(0, TAB_TITLES.lastIndex)
+    TabRow(
+        selectedTabIndex = index,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary,
+    ) {
+        TAB_TITLES.forEachIndexed { i, title ->
+            Tab(
+                selected = index == i,
+                onClick = { onSelect(i) },
+                text = {
+                    Text(
+                        title,
+                        fontWeight = if (index == i) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                },
+            )
         }
     }
 }
@@ -694,9 +756,7 @@ private fun isUpdatable(
 private fun resolveInstalled(item: CatalogItem, installed: Map<String, InstalledApp>): InstalledApp? {
     val found = item.packages.firstNotNullOfOrNull { installed[it] } ?: return null
     if (!item.exclusive) return found
-    val availableMajor = item.details?.version?.substringBefore('.')?.toIntOrNull() ?: return null
-    val installedMajor = found.versionName.substringBefore('.').toIntOrNull()
-    return if (installedMajor == availableMajor) found else null
+    return if (sameVersionFamily(item.details?.version, found.versionName)) found else null
 }
 
 @Composable
@@ -709,13 +769,25 @@ private fun AppRow(
     onAction: (CatalogItem) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val installedApp = resolveInstalled(item, installed)
     val updatable = isUpdatable(item, installedApp, installedPatches)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+        // Light up the whole row for D-pad users when a control inside it has focus. The card
+        // is a focus *group* (not one big focus target), so the D-pad steps through the row's
+        // actual controls — the download/install button and the details chevron.
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.hasFocus }
+            .focusGroup()
+            .then(
+                if (focused) Modifier.border(
+                    2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp),
+                ) else Modifier
+            ),
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -784,6 +856,7 @@ private fun DetailsPanel(item: CatalogItem, installedApp: InstalledApp?) {
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         Spacer(Modifier.size(10.dp))
         DetailRow("Version", d.version ?: "—")
+        d.patches?.let { DetailRow("Patches", it) }
         d.patch?.let { DetailRow("Patch version", it) }
         DetailRow("Compiled by", d.compiledBy)
         DetailRow("Size", d.size)

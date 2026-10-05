@@ -1,5 +1,7 @@
 package com.vmpro.app.data
 
+import org.json.JSONObject
+
 /** A single downloadable file attached to a GitHub release. */
 data class Asset(
     val name: String,
@@ -28,7 +30,43 @@ data class Release(
 data class ResolvedAsset(
     val asset: Asset,
     val release: Release,
+    /** Version string when known from an index (e.g. the Morphe-Builds manifest). */
+    val version: String? = null,
 )
+
+/** One build listed in Morphe-Builds' manifest.json (key = "app_name|source|arch"). */
+data class ManifestEntry(
+    val appName: String,
+    val source: String,
+    val arch: String,
+    val apk: String,
+    val version: String,
+)
+
+/** The resolved Morphe-Builds `latest` release together with its parsed manifest. */
+data class MorpheBuilds(
+    val release: Release?,
+    val entries: Map<String, ManifestEntry>,
+)
+
+/** Parse Morphe-Builds' manifest.json into entries keyed "app_name|source|arch". */
+fun parseManifest(json: String): Map<String, ManifestEntry> {
+    val entriesObj = JSONObject(json).optJSONObject("entries") ?: return emptyMap()
+    val out = LinkedHashMap<String, ManifestEntry>()
+    val keys = entriesObj.keys()
+    while (keys.hasNext()) {
+        val k = keys.next()
+        val e = entriesObj.getJSONObject(k)
+        out[k] = ManifestEntry(
+            appName = e.optString("app_name"),
+            source = e.optString("source"),
+            arch = e.optString("arch"),
+            apk = e.optString("apk"),
+            version = e.optString("built_version"),
+        )
+    }
+    return out
+}
 
 /**
  * True when [available] is a strictly newer version string than [installed], comparing
@@ -45,6 +83,17 @@ fun isNewerVersion(available: String?, installed: String?): Boolean {
         if (x != y) return x > y
     }
     return false
+}
+
+/**
+ * True when [installedVersion] belongs to the same product as [availableVersion], compared by
+ * major-version family. Used to tell apart the two builds that share the MicroG package —
+ * GmsCore ships 0.x, MicroG RE ships 6.x — so an in-place update isn't mistaken for a switch.
+ */
+fun sameVersionFamily(availableVersion: String?, installedVersion: String?): Boolean {
+    val a = availableVersion?.removePrefix("v")?.substringBefore('.')?.toIntOrNull() ?: return false
+    val b = installedVersion?.removePrefix("v")?.substringBefore('.')?.toIntOrNull() ?: return false
+    return a == b
 }
 
 fun formatBytes(bytes: Long): String {
