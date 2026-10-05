@@ -32,8 +32,10 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The ubuntu-latest runner already ships the Android SDK (ANDROID_SDK_ROOT set,
+      # platforms + build-tools preinstalled with licenses accepted). The old
+      # android-actions/setup-android@v3 step started failing, so we rely on the
+      # preinstalled SDK and let Gradle fetch anything missing.
 
       - name: Restore keystore
         env:
