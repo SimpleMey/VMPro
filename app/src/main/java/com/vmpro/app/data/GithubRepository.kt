@@ -121,15 +121,25 @@ class GithubRepository {
 
     // ---- MicroG tab ----
 
-    /** Latest *stable* (non-prerelease) release's preferred APK for a standalone MicroG repo. */
+    /** Latest *stable* (non-prerelease) release's APK for a MicroG repo, matched to the device. */
     suspend fun resolveMicroG(entry: MicroGEntry): ResolvedAsset? {
+        val huawei = isHuaweiDevice()
         val releases = fetchReleases(entry.owner, entry.repo, perPage = 15)
         for (release in releases.filter { !it.prerelease }) {
-            val apks = release.assets.filter { it.isApk }
-                .filter { entry.avoid == null || !it.name.contains(entry.avoid, ignoreCase = true) }
-            val chosen = apks.firstOrNull {
-                entry.prefer != null && it.name.contains(entry.prefer, ignoreCase = true)
-            } ?: apks.firstOrNull()
+            var apks = release.assets.filter { it.isApk }
+            if (entry.avoid.isNotEmpty()) {
+                apks = apks.filter { a -> entry.avoid.none { a.name.contains(it, ignoreCase = true) } }
+            }
+            // GmsCore ships a Huawei (hw) build and a normal one: take the right one per device.
+            if (entry.hwAware) {
+                apks = if (huawei) {
+                    apks.filter { it.name.contains("-hw", ignoreCase = true) }.ifEmpty { apks }
+                } else {
+                    apks.filter { !it.name.contains("-hw", ignoreCase = true) }
+                }
+            }
+            if (apks.isEmpty()) continue
+            val chosen = if (entry.archAware) chooseForDevice(apks) else apks.firstOrNull()
             if (chosen != null) return ResolvedAsset(chosen, release)
         }
         return null
@@ -144,9 +154,7 @@ class GithubRepository {
             val apks = release.assets.filter { it.isApk }
             if (apks.isEmpty()) continue
             val pool = apks.filter { it.name.contains("stable", ignoreCase = true) }.ifEmpty { apks }
-            val chosen = entry.archPreference.firstNotNullOfOrNull { pref ->
-                pool.firstOrNull { it.name.contains(pref, ignoreCase = true) }
-            } ?: pool.first()
+            val chosen = chooseForDevice(pool) ?: pool.first()
             return ResolvedAsset(chosen, release)
         }
         return null

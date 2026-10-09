@@ -20,6 +20,8 @@
         <package android:name="app.revanced.android.apps.youtube.music" />
         <package android:name="app.morphe.android.youtube" />
         <package android:name="app.morphe.android.apps.youtube.music" />
+        <package android:name="app.rvx.android.youtube" />
+        <package android:name="app.rvx.android.apps.youtube.music" />
         <package android:name="com.reddit.frontpage" />
         <package android:name="com.twitter.android" />
         <package android:name="app.revanced.android.gms" />

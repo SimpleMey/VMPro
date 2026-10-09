@@ -27,6 +27,9 @@ import com.vmpro.app.data.versionOf
 import com.vmpro.app.util.DownloadController
 import com.vmpro.app.util.DownloadPhase
 import com.vmpro.app.util.Downloader
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +56,14 @@ data class AppDetails(
     val patches: String? = null,
 )
 
+/** One attribution shown on the app detail page: who built the APK, or whose patches it uses. */
+data class SourceRef(
+    val role: String,
+    val name: String,
+    val repo: String? = null,
+    val url: String? = null,
+)
+
 /** A single resolved row: an app/module and the file to download (if any). */
 data class CatalogItem(
     val label: String,
@@ -64,6 +75,8 @@ data class CatalogItem(
     val packages: List<String>,
     /** True when this item's package is shared with another (mutually exclusive install). */
     val exclusive: Boolean = false,
+    /** Where this build and its patches come from, shown on the detail page. */
+    val sources: List<SourceRef> = emptyList(),
 )
 
 /** Raised when installing would collide with an app already on the device. */
@@ -257,9 +270,14 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Apps tab — Morphe auto-builds (manifest) plus direct-from-GitHub phone apps (NewTube). */
-    private suspend fun loadApps(): List<Section> {
-        val builds = morpheBuilds
-            ?: repository.fetchMorpheBuilds(MORPHE_BUILDS).also { morpheBuilds = it }
+    private suspend fun loadApps(): List<Section> = coroutineScope {
+        // Fetch the Morphe-Builds manifest and the direct GitHub apps (NewTube) in parallel,
+        // rather than one after another, so the Apps tab loads in a single round-trip's time.
+        val buildsDeferred = async {
+            morpheBuilds ?: repository.fetchMorpheBuilds(MORPHE_BUILDS).also { morpheBuilds = it }
+        }
+        val directDeferred = PHONE_DIRECT.map { entry -> async { loadReleaseItem(entry) } }
+        val builds = buildsDeferred.await()
         val morpheItems = APP_CATALOG.map { entry ->
             val resolved = repository.resolveMorphe(builds, entry.appName, entry.source)
             val asset = resolved?.asset
@@ -274,6 +292,15 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                     patches = patchBrandFor(entry.source),
                 )
             }
+            val builtUrl = resolved?.release?.htmlUrl
+                ?: "https://github.com/${MORPHE_BUILDS.owner}/${MORPHE_BUILDS.repo}/releases"
+            val sources = buildList {
+                add(SourceRef("Built by", "Morphe auto-builds",
+                    "${MORPHE_BUILDS.owner}/${MORPHE_BUILDS.repo}", builtUrl))
+                patchRepoFor(entry.source)?.let { (slug, url) ->
+                    add(SourceRef("Patches", patchBrandFor(entry.source), slug, url))
+                }
+            }
             CatalogItem(
                 label = entry.label,
                 iconRes = entry.iconRes,
@@ -282,17 +309,27 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                 details = details,
                 packages = entry.packages,
                 exclusive = entry.packages.firstOrNull() in sharedPackages,
+                sources = sources,
             )
         }
-        val directItems = PHONE_DIRECT.map { entry -> loadReleaseItem(entry) }
-        return listOf(Section(title = null, iconRes = null, items = morpheItems + directItems))
+        val directItems = directDeferred.awaitAll()
+        listOf(Section(title = null, iconRes = null, items = morpheItems + directItems))
     }
 
     /** Human patch-brand name for a Morphe-Builds source key. */
     private fun patchBrandFor(source: String): String = when (source) {
         "morphe" -> "Morphe"
         "piko-newx", "piko" -> "Piko"
+        "revanced-anddea" -> "Anddea"
         else -> source.replaceFirstChar { it.uppercase() }
+    }
+
+    /** "owner/repo" + web URL of the patch set behind a Morphe-Builds / module source key. */
+    private fun patchRepoFor(source: String): Pair<String, String>? = when (source) {
+        "morphe" -> "MorpheApp/morphe-patches" to "https://github.com/MorpheApp/morphe-patches"
+        "piko-newx", "piko" -> "crimera/piko-newx" to "https://github.com/crimera/piko-newx"
+        "revanced-anddea" -> "anddea/revanced-patches" to "https://github.com/anddea/revanced-patches"
+        else -> null
     }
 
     /** Resolve one app straight from its own GitHub release (TV apps and direct phone apps). */
@@ -310,6 +347,8 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                 lastUpdated = it.release.publishedAt.ifBlank { null },
             )
         }
+        val repoUrl = resolved?.release?.htmlUrl
+            ?: "https://github.com/${entry.owner}/${entry.repo}/releases"
         return CatalogItem(
             label = entry.label,
             iconRes = entry.iconRes,
@@ -318,6 +357,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
             details = details,
             packages = entry.packages,
             exclusive = false,
+            sources = listOf(SourceRef("Source", entry.owner, "${entry.owner}/${entry.repo}", repoUrl)),
         )
     }
 
@@ -337,6 +377,14 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                     lastUpdated = it.release.publishedAt.ifBlank { null },
                 )
             }
+            val relUrl = resolved?.release?.htmlUrl
+                ?: "https://github.com/${J_HC.owner}/${J_HC.repo}/releases"
+            val sources = buildList {
+                add(SourceRef("Source", J_HC.owner, "${J_HC.owner}/${J_HC.repo}", relUrl))
+                patchRepoFor(entry.variant)?.let { (slug, url) ->
+                    add(SourceRef("Patches", patchBrandFor(entry.variant), slug, url))
+                }
+            }
             CatalogItem(
                 label = entry.label,
                 iconRes = entry.iconRes,
@@ -345,44 +393,50 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                 details = details,
                 packages = emptyList(),
                 exclusive = false,
+                sources = sources,
             )
         }
         return listOf(Section(title = null, iconRes = null, items = items))
     }
 
-    /** MicroG tab — GmsCore + MicroG RE from their own repos. */
-    private suspend fun loadMicroG(): List<Section> {
+    /** MicroG tab — GmsCore + MicroG RE from their own repos (resolved in parallel). */
+    private suspend fun loadMicroG(): List<Section> = coroutineScope {
         val items = MICROG_CATALOG.map { entry ->
-            val resolved = repository.resolveMicroG(entry)
-            val asset = resolved?.asset
-            val version = resolved?.release?.tag?.removePrefix("v")
-                ?: asset?.let { versionOf(it.name)?.removePrefix("v") }
-            val details = resolved?.let {
-                AppDetails(
-                    version = version,
-                    patch = null,
-                    compiledBy = entry.owner,
-                    size = formatBytes(it.asset.sizeBytes),
-                    lastUpdated = it.release.publishedAt.ifBlank { null },
+            async {
+                val resolved = repository.resolveMicroG(entry)
+                val asset = resolved?.asset
+                val version = resolved?.release?.tag?.removePrefix("v")
+                    ?: asset?.let { versionOf(it.name)?.removePrefix("v") }
+                val details = resolved?.let {
+                    AppDetails(
+                        version = version,
+                        patch = null,
+                        compiledBy = entry.owner,
+                        size = formatBytes(it.asset.sizeBytes),
+                        lastUpdated = it.release.publishedAt.ifBlank { null },
+                    )
+                }
+                val relUrl = resolved?.release?.htmlUrl
+                    ?: "https://github.com/${entry.owner}/${entry.repo}/releases"
+                CatalogItem(
+                    label = entry.label,
+                    iconRes = entry.iconRes,
+                    asset = asset,
+                    subtitle = subtitleFor(asset, version, "No APK available"),
+                    details = details,
+                    packages = entry.packages,
+                    exclusive = entry.packages.firstOrNull() in sharedPackages,
+                    sources = listOf(SourceRef("Source", entry.owner, "${entry.owner}/${entry.repo}", relUrl)),
                 )
             }
-            CatalogItem(
-                label = entry.label,
-                iconRes = entry.iconRes,
-                asset = asset,
-                subtitle = subtitleFor(asset, version, "No APK available"),
-                details = details,
-                packages = entry.packages,
-                exclusive = entry.packages.firstOrNull() in sharedPackages,
-            )
-        }
-        return listOf(Section(title = null, iconRes = null, items = items))
+        }.awaitAll()
+        listOf(Section(title = null, iconRes = null, items = items))
     }
 
-    /** TV tab — Android TV apps from their own GitHub release pages. */
-    private suspend fun loadTv(): List<Section> {
-        val items = TV_CATALOG.map { entry -> loadReleaseItem(entry) }
-        return listOf(Section(title = null, iconRes = null, items = items))
+    /** TV tab — Android TV apps from their own GitHub release pages (resolved in parallel). */
+    private suspend fun loadTv(): List<Section> = coroutineScope {
+        val items = TV_CATALOG.map { entry -> async { loadReleaseItem(entry) } }.awaitAll()
+        listOf(Section(title = null, iconRes = null, items = items))
     }
 
     private fun subtitleFor(asset: Asset?, version: String?, emptyLabel: String): String {
