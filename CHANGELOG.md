@@ -2,6 +2,16 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.0
+- **App pages**: tapping an app now opens a full page with the install button, version and size details, and a Sources section that credits where the build and patches come from.
+- **RVX App and RVX Music** added to the Phone apps, built from Anddea patches.
+- **Automatic architecture**: VMPro detects your device CPU and downloads the matching build (arm64, armeabi-v7a, or x86) for apps, MicroG, and TV apps, so you never pick the wrong one.
+- **Huawei**: GmsCore now installs the Huawei (HMS) build on Huawei devices, and MicroG RE installs the right per-arch build.
+- **Swipe tabs**: swipe left and right to move between Apps, MicroG, and Modules.
+- **New Settings page**: a gear icon opens Settings with Downloads (see and delete what you downloaded), a dark mode switch, My device (manufacturer, architecture, storage, Android version), an FAQ, and About.
+- **Modules**: a note now makes clear these are Magisk modules to flash, not installable APKs.
+- **Faster loading**: the Apps, MicroG, and TV tabs now load their lists in parallel.
+
 ## v4.4.0
 - **Android TV support**: VMPro now runs on Android TV with full D-pad navigation and appears on the TV home screen.
 - **TV apps**: a new TV tab with SmartTube and TizenTube (Cobalt), taken straight from their GitHub releases.
