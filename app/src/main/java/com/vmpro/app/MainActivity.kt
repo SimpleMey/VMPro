@@ -1,16 +1,18 @@
 package com.vmpro.app
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.height
@@ -27,21 +29,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
@@ -74,8 +81,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,12 +110,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.DisposableEffect
 import com.vmpro.app.data.isNewerVersion
 import com.vmpro.app.data.sameVersionFamily
-import com.vmpro.app.ui.AboutScreen
 import com.vmpro.app.ui.CatalogItem
 import com.vmpro.app.ui.InstalledApp
 import com.vmpro.app.ui.ManagerViewModel
+import com.vmpro.app.ui.DownloadsScreen
 import com.vmpro.app.ui.Section
+import com.vmpro.app.ui.SettingsScreen
 import com.vmpro.app.ui.SharePrompt
+import com.vmpro.app.ui.SourceRef
 import com.vmpro.app.ui.TAB_APPS
 import com.vmpro.app.ui.TAB_MICROG
 import com.vmpro.app.ui.TAB_MODULES
@@ -116,6 +127,7 @@ import com.vmpro.app.ui.TabState
 import com.vmpro.app.ui.ThemePrefs
 import com.vmpro.app.ui.VmproTheme
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.launch
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.haze
@@ -159,29 +171,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class Screen { MAIN, SETTINGS, DOWNLOADS }
+
 @Composable
 private fun App(isDark: Boolean, onToggleTheme: () -> Unit) {
     val context = LocalContext.current
-    var showAbout by remember { mutableStateOf(false) }
+    var screen by remember { mutableStateOf(Screen.MAIN) }
     var showShareExit by remember { mutableStateOf(false) }
 
-    if (showAbout) {
-        BackHandler { showAbout = false }
-        AboutScreen(onBack = { showAbout = false })
-    } else {
-        // Intercept the exit back-press to nudge sharing — but only once per app version.
-        BackHandler(enabled = !showShareExit) {
-            if (SharePrompt.isDoneFor(context, BuildConfig.VERSION_NAME)) {
-                (context as? Activity)?.finish()
-            } else {
-                showShareExit = true
-            }
+    when (screen) {
+        Screen.SETTINGS -> {
+            BackHandler { screen = Screen.MAIN }
+            SettingsScreen(
+                onBack = { screen = Screen.MAIN },
+                isDark = isDark,
+                onToggleTheme = onToggleTheme,
+                onOpenDownloads = { screen = Screen.DOWNLOADS },
+            )
         }
-        ManagerScreen(
-            onOpenAbout = { showAbout = true },
-            isDark = isDark,
-            onToggleTheme = onToggleTheme,
-        )
+        Screen.DOWNLOADS -> {
+            BackHandler { screen = Screen.SETTINGS }
+            DownloadsScreen(onBack = { screen = Screen.SETTINGS })
+        }
+        Screen.MAIN -> {
+            // Intercept the exit back-press to nudge sharing — but only once per app version.
+            BackHandler(enabled = !showShareExit) {
+                if (SharePrompt.isDoneFor(context, BuildConfig.VERSION_NAME)) {
+                    (context as? Activity)?.finish()
+                } else {
+                    showShareExit = true
+                }
+            }
+            ManagerScreen(
+                onOpenSettings = { screen = Screen.SETTINGS },
+                isDark = isDark,
+                onToggleTheme = onToggleTheme,
+            )
+        }
     }
 
     if (showShareExit) {
@@ -292,38 +318,34 @@ private val BOTTOM_DESTS = listOf(
     NavDest(TAB_TV, Icons.Filled.Tv, "TV"),
 )
 
-/** Suggests switching to the other MicroG when one is already installed. */
-private data class MicrogSwitch(val installedLabel: String, val target: CatalogItem)
-
 /**
- * GmsCore and MicroG RE share one package, so only the installed version tells them apart:
- * GmsCore uses 0.x.y builds, MicroG RE uses 6.x. If one is installed, suggest the other.
+ * For an exclusive (shared-package) item such as GmsCore or MicroG RE, the note shown on its
+ * detail page when the OTHER product is currently installed, since installing this one replaces
+ * it. Returns null when nothing conflicting is installed.
  */
-private fun computeMicrogSwitch(
-    sections: List<Section>,
+private fun microgReplaceNotice(
+    item: CatalogItem,
     installed: Map<String, InstalledApp>,
-): MicrogSwitch? {
-    val items = sections.flatMap { it.items }
-    val gmscore = items.find { it.label == "GmsCore" } ?: return null
-    val microgre = items.find { it.label == "MicroG RE" } ?: return null
-    val pkg = gmscore.packages.firstOrNull() ?: return null
-    val installedVersion = installed[pkg]?.versionName ?: return null
-
-    val isGmscore = when {
-        gmscore.details?.version == installedVersion -> true
-        microgre.details?.version == installedVersion -> false
-        installedVersion.startsWith("0") -> true
-        else -> false
+    states: Map<Int, TabState>,
+): String? {
+    if (!item.exclusive) return null
+    val pkg = item.packages.firstOrNull() ?: return null
+    val inst = installed[pkg] ?: return null
+    // The same product being installed (same version family) is just an update, not a switch.
+    if (sameVersionFamily(item.details?.version, inst.versionName)) return null
+    val microItems = (states[TAB_MICROG] as? TabState.Success)?.sections?.flatMap { it.items }
+    val other = microItems?.firstOrNull { it.label != item.label && pkg in it.packages }?.label
+    return if (other != null) {
+        "$other is installed. Installing ${item.label} will replace it, since they share one package."
+    } else {
+        "Another MicroG is installed. Installing ${item.label} will replace it, since they share one package."
     }
-    val target = if (isGmscore) microgre else gmscore
-    if (target.asset == null) return null
-    return MicrogSwitch(if (isGmscore) "GmsCore" else "MicroG RE", target)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ManagerScreen(
-    onOpenAbout: () -> Unit,
+    onOpenSettings: () -> Unit,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
     viewModel: ManagerViewModel = viewModel(),
@@ -337,14 +359,34 @@ fun ManagerScreen(
     val conflict by viewModel.conflict.collectAsStateWithLifecycle()
     val updateVersion by viewModel.updateVersion.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val state = states[selectedTab] ?: TabState.Loading
     val hazeState = remember { HazeState() }
     // Remember which inner tab (Apps/MicroG/Modules) to return to from the TV destination.
     var lastInner by remember { mutableStateOf(TAB_APPS) }
     if (selectedTab != TAB_TV) lastInner = selectedTab
+    // When non-null, the full-screen install page for this row is shown instead of the list.
+    var detailItem by remember { mutableStateOf<CatalogItem?>(null) }
     // On Android TV, drop initial focus into the list so the D-pad starts there (not on phones).
     val isTvDevice = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    }
+
+    // The three inner tabs (Apps/MicroG/Modules) are a swipeable pager. The pager and the
+    // selected tab are kept in sync: tapping a tab or returning from TV scrolls the pager,
+    // and swiping the pager selects (and loads) that tab.
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = lastInner.coerceIn(0, 2)) { 3 }
+    // Swipe is a touch gesture, so the pager is used on phones only; TV keeps tap-only tabs.
+    if (!isTvDevice) {
+        LaunchedEffect(selectedTab) {
+            if (selectedTab != TAB_TV && pagerState.currentPage != selectedTab) {
+                pagerState.animateScrollToPage(selectedTab)
+            }
+        }
+        LaunchedEffect(pagerState) {
+            snapshotFlow { pagerState.currentPage }.collect { page ->
+                if (selectedTab != TAB_TV && selectedTab != page) viewModel.selectTab(page)
+            }
+        }
     }
 
     // Re-check installed apps whenever the user returns to the app.
@@ -357,6 +399,20 @@ fun ManagerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    if (detailItem != null) {
+        val item = detailItem!!
+        BackHandler { detailItem = null }
+        AppDetailScreen(
+            item = item,
+            phases = phases,
+            progress = progress,
+            installed = installed,
+            installedPatches = installedPatches,
+            replaceNotice = microgReplaceNotice(item, installed, states),
+            onAction = viewModel::onAction,
+            onBack = { detailItem = null },
+        )
+    } else {
     Scaffold(
         topBar = {
             Column {
@@ -382,8 +438,8 @@ fun ManagerScreen(
                         IconButton(onClick = { viewModel.refresh() }) {
                             Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                         }
-                        IconButton(onClick = onOpenAbout) {
-                            Icon(Icons.Outlined.Info, contentDescription = "About")
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -401,9 +457,16 @@ fun ManagerScreen(
                         },
                     )
                 }
-                // Inner tabs live under the "Apps" destination only.
+                // Inner tabs live under the "Phone" destination only. On phones they drive the
+                // swipe pager; on TV (no touch) they select the tab directly.
                 if (selectedTab != TAB_TV) {
-                    InnerTabs(selected = selectedTab, onSelect = { viewModel.selectTab(it) })
+                    InnerTabs(
+                        selected = if (isTvDevice) selectedTab.coerceIn(0, 2) else pagerState.currentPage,
+                        onSelect = {
+                            if (isTvDevice) viewModel.selectTab(it)
+                            else scope.launch { pagerState.animateScrollToPage(it) }
+                        },
+                    )
                 }
             }
         },
@@ -455,21 +518,10 @@ fun ManagerScreen(
                     ),
                 ),
         ) {
-        when (val s = state) {
-            is TabState.Loading -> CenterBox(padding) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-
-            is TabState.Error -> CenterBox(padding) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(s.message, color = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.size(12.dp))
-                    Button(onClick = { viewModel.refresh() }) { Text("Retry") }
-                }
-            }
-
-            is TabState.Success -> SectionList(
-                sections = s.sections,
+        if (selectedTab == TAB_TV) {
+            TabPane(
+                state = states[TAB_TV] ?: TabState.Loading,
+                tabIndex = TAB_TV,
                 padding = padding,
                 phases = phases,
                 progress = progress,
@@ -477,16 +529,42 @@ fun ManagerScreen(
                 installedPatches = installedPatches,
                 requestInitialFocus = isTvDevice,
                 onAction = viewModel::onAction,
-                notice = if (selectedTab == TAB_MICROG) {
-                    "Only one MicroG can be installed at a time — GmsCore and MicroG RE " +
-                        "share the same package name, so installing one replaces the other."
-                } else null,
-                switch = if (selectedTab == TAB_MICROG) {
-                    computeMicrogSwitch(s.sections, installed)
-                } else null,
+                onOpen = { detailItem = it },
+                onRetry = { viewModel.refresh() },
             )
+        } else if (isTvDevice) {
+            TabPane(
+                state = states[selectedTab] ?: TabState.Loading,
+                tabIndex = selectedTab,
+                padding = padding,
+                phases = phases,
+                progress = progress,
+                installed = installed,
+                installedPatches = installedPatches,
+                requestInitialFocus = true,
+                onAction = viewModel::onAction,
+                onOpen = { detailItem = it },
+                onRetry = { viewModel.refresh() },
+            )
+        } else {
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                TabPane(
+                    state = states[page] ?: TabState.Loading,
+                    tabIndex = page,
+                    padding = padding,
+                    phases = phases,
+                    progress = progress,
+                    installed = installed,
+                    installedPatches = installedPatches,
+                    requestInitialFocus = false,
+                    onAction = viewModel::onAction,
+                    onOpen = { detailItem = it },
+                    onRetry = { viewModel.refresh() },
+                )
+            }
         }
         }
+    }
     }
 
     conflict?.let { info ->
@@ -523,6 +601,56 @@ private fun CenterBox(padding: PaddingValues, content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/** One tab's content: loading / error / the section list, with the tab's notice banner. */
+@Composable
+private fun TabPane(
+    state: TabState,
+    tabIndex: Int,
+    padding: PaddingValues,
+    phases: Map<String, DownloadPhase>,
+    progress: Map<String, Int>,
+    installed: Map<String, InstalledApp>,
+    installedPatches: Map<String, String>,
+    requestInitialFocus: Boolean,
+    onAction: (CatalogItem) -> Unit,
+    onOpen: (CatalogItem) -> Unit,
+    onRetry: () -> Unit,
+) {
+    when (state) {
+        is TabState.Loading -> CenterBox(padding) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+
+        is TabState.Error -> CenterBox(padding) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(state.message, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.size(12.dp))
+                Button(onClick = onRetry) { Text("Retry") }
+            }
+        }
+
+        is TabState.Success -> SectionList(
+            sections = state.sections,
+            padding = padding,
+            phases = phases,
+            progress = progress,
+            installed = installed,
+            installedPatches = installedPatches,
+            requestInitialFocus = requestInitialFocus,
+            onAction = onAction,
+            onOpen = onOpen,
+            notice = when (tabIndex) {
+                TAB_MICROG -> "Only one MicroG can be installed at a time. GmsCore and MicroG RE " +
+                    "share the same package name, so installing one replaces the other."
+                TAB_MODULES -> "These are Magisk modules. Flash them in Magisk or KernelSU, " +
+                    "they are not installable APKs."
+                else -> null
+            },
+            noticeIcon = if (tabIndex == TAB_MODULES) R.drawable.ic_magisk else null,
+        )
+    }
+}
+
 @Composable
 private fun SectionList(
     sections: List<Section>,
@@ -533,8 +661,9 @@ private fun SectionList(
     installedPatches: Map<String, String>,
     requestInitialFocus: Boolean = false,
     onAction: (CatalogItem) -> Unit,
+    onOpen: (CatalogItem) -> Unit,
     notice: String? = null,
-    switch: MicrogSwitch? = null,
+    noticeIcon: Int? = null,
 ) {
     val listFocus = remember { FocusRequester() }
     LazyColumn(
@@ -550,10 +679,7 @@ private fun SectionList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (notice != null) {
-            item(key = "notice") { NoticeCard(notice) }
-        }
-        if (switch != null) {
-            item(key = "switch") { SwitchCard(switch, onAction) }
+            item(key = "notice") { NoticeCard(notice, noticeIcon) }
         }
         sections.forEachIndexed { si, section ->
             if (section.title != null) {
@@ -563,7 +689,7 @@ private fun SectionList(
                 count = section.items.size,
                 key = { i -> "s${si}_$i" },
             ) { i ->
-                AppRow(section.items[i], phases, progress, installed, installedPatches, onAction)
+                AppRow(section.items[i], phases, progress, installed, installedPatches, onOpen)
             }
         }
     }
@@ -634,7 +760,7 @@ private fun UpdateBanner(version: String, onUpdate: () -> Unit) {
 }
 
 @Composable
-private fun NoticeCard(text: String) {
+private fun NoticeCard(text: String, iconRes: Int? = null) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp),
@@ -644,49 +770,28 @@ private fun NoticeCard(text: String) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Outlined.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
+            if (iconRes != null) {
+                Image(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                )
+            } else {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Text(
                 text,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
             )
-        }
-    }
-}
-
-@Composable
-private fun SwitchCard(switch: MicrogSwitch, onAction: (CatalogItem) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.SwapHoriz,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text("${switch.installedLabel} is installed", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Switch to ${switch.target.label}?",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { onAction(switch.target) }) { Text("Switch") }
         }
     }
 }
@@ -766,9 +871,8 @@ private fun AppRow(
     progress: Map<String, Int>,
     installed: Map<String, InstalledApp>,
     installedPatches: Map<String, String>,
-    onAction: (CatalogItem) -> Unit,
+    onOpen: (CatalogItem) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     val installedApp = resolveInstalled(item, installed)
     val updatable = isUpdatable(item, installedApp, installedPatches)
@@ -776,13 +880,13 @@ private fun AppRow(
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
-        // Light up the whole row for D-pad users when a control inside it has focus. The card
-        // is a focus *group* (not one big focus target), so the D-pad steps through the row's
-        // actual controls — the download/install button and the details chevron.
+        // The whole row opens the app's install page. The focus border lights up the row for
+        // D-pad users; a clickable card is a single focus target, so the TV remote steps from
+        // row to row and the center key opens the page.
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.hasFocus }
-            .focusGroup()
+            .clickable { onOpen(item) }
             .then(
                 if (focused) Modifier.border(
                     2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp),
@@ -814,16 +918,18 @@ private fun AppRow(
                     )
                 }
                 Spacer(Modifier.width(8.dp))
-                StateButton(item, phases, progress, installedApp, updatable, onAction)
-                if (item.details != null) {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = if (expanded) "Hide details" else "Show details",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        )
-                    }
+                when {
+                    installedApp != null && updatable ->
+                        StatusPill("Update", MaterialTheme.colorScheme.secondary)
+                    installedApp != null ->
+                        StatusPill("Installed", MaterialTheme.colorScheme.primary)
                 }
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                )
             }
 
             item.asset?.let { asset ->
@@ -840,41 +946,6 @@ private fun AppRow(
                     )
                 }
             }
-
-            AnimatedVisibility(visible = expanded && item.details != null) {
-                DetailsPanel(item, installedApp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailsPanel(item: CatalogItem, installedApp: InstalledApp?) {
-    val context = LocalContext.current
-    val d = item.details ?: return
-    Column(Modifier.padding(top = 12.dp)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-        Spacer(Modifier.size(10.dp))
-        DetailRow("Version", d.version ?: "—")
-        d.patches?.let { DetailRow("Patches", it) }
-        d.patch?.let { DetailRow("Patch version", it) }
-        DetailRow("Compiled by", d.compiledBy)
-        DetailRow("Size", d.size)
-        d.lastUpdated?.let { DetailRow("Last updated", it) }
-        installedApp?.let { DetailRow("Installed", it.versionName.ifBlank { "yes" }) }
-
-        if (installedApp != null) {
-            Spacer(Modifier.size(10.dp))
-            OutlinedButton(
-                onClick = { Downloader.uninstall(context, installedApp.packageName) },
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary,
-                ),
-            ) {
-                Icon(Icons.Filled.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Uninstall")
-            }
         }
     }
 }
@@ -884,7 +955,7 @@ private fun DetailRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
@@ -892,16 +963,176 @@ private fun DetailRow(label: String, value: String) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         )
+        Spacer(Modifier.width(12.dp))
         Text(
             value,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f, fill = false),
         )
     }
 }
 
 @Composable
-private fun StateButton(
+private fun StatusPill(text: String, color: Color) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/** Full-screen install page for one catalog row: hero, action, details, and sources. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDetailScreen(
+    item: CatalogItem,
+    phases: Map<String, DownloadPhase>,
+    progress: Map<String, Int>,
+    installed: Map<String, InstalledApp>,
+    installedPatches: Map<String, String>,
+    replaceNotice: String? = null,
+    onAction: (CatalogItem) -> Unit,
+    onBack: () -> Unit,
+) {
+    val installedApp = resolveInstalled(item, installed)
+    val updatable = isUpdatable(item, installedApp, installedPatches)
+    val d = item.details
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("App") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+        ) {
+            Spacer(Modifier.height(10.dp))
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painter = painterResource(item.iconRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(20.dp)),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    item.label,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    item.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            replaceNotice?.let {
+                Spacer(Modifier.height(16.dp))
+                NoticeCard(it)
+            }
+
+            Spacer(Modifier.height(18.dp))
+            DetailActionArea(item, phases, progress, installedApp, updatable, onAction)
+
+            item.asset?.let { asset ->
+                if (phases[asset.downloadUrl] == DownloadPhase.DOWNLOADING) {
+                    Spacer(Modifier.height(12.dp))
+                    @Suppress("DEPRECATION")
+                    LinearProgressIndicator(
+                        progress = (progress[asset.downloadUrl] ?: 0) / 100f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    )
+                }
+            }
+
+            if (d != null) {
+                Spacer(Modifier.height(20.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        d.version?.let { DetailRow("Version", it) }
+                        d.patches?.let { DetailRow("Patches", it) }
+                        d.patch?.let { DetailRow("Patch version", it) }
+                        item.asset?.takeIf { it.isApk }?.let { DetailRow("Architecture", archLabel(it.name)) }
+                        DetailRow("Size", d.size)
+                        d.lastUpdated?.let { DetailRow("Updated", it) }
+                        installedApp?.let { DetailRow("Installed", it.versionName.ifBlank { "yes" }) }
+                        item.packages.firstOrNull()?.let { DetailRow("Package", it) }
+                    }
+                }
+            }
+
+            if (item.sources.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "Sources",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        item.sources.forEachIndexed { i, s ->
+                            if (i > 0) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                                )
+                            }
+                            SourceRowView(s)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+        }
+    }
+}
+
+@Composable
+private fun DetailActionArea(
     item: CatalogItem,
     phases: Map<String, DownloadPhase>,
     progress: Map<String, Int>,
@@ -909,51 +1140,126 @@ private fun StateButton(
     updatable: Boolean,
     onAction: (CatalogItem) -> Unit,
 ) {
+    val context = LocalContext.current
     val asset = item.asset
     if (asset == null) {
-        FilledTonalButton(onClick = {}, enabled = false) { Text("N/A") }
+        FilledTonalButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+            Text("Not available")
+        }
         return
     }
+    val pkg = installedApp?.packageName
     val phase = phases[asset.downloadUrl] ?: DownloadPhase.IDLE
-    // Installed at the available version (or newer) — takes priority over a stale download
-    // so the button flips to "Installed" as soon as the app is detected on the device.
-    // (installedApp is already disambiguated for shared-package items by resolveInstalled.)
+    // Installed at the available version (or newer): offer Open instead of a redundant install.
     val installedCurrent = asset.isApk && installedApp != null && !updatable
-    when {
-        phase == DownloadPhase.DOWNLOADING -> FilledTonalButton(
-            onClick = {},
-            enabled = false,
-            contentPadding = PaddingValues(horizontal = 14.dp),
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(15.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("${progress[asset.downloadUrl] ?: 0}%")
+    val canOpen = pkg != null && context.packageManager.getLaunchIntentForPackage(pkg) != null
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        val primary = Modifier.weight(1f)
+        when {
+            phase == DownloadPhase.DOWNLOADING ->
+                FilledTonalButton(onClick = {}, enabled = false, modifier = primary) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Downloading ${progress[asset.downloadUrl] ?: 0}%")
+                }
+
+            installedCurrent && canOpen ->
+                Button(onClick = { openApp(context, pkg!!) }, modifier = primary) { Text("Open") }
+
+            installedCurrent ->
+                FilledTonalButton(onClick = {}, enabled = false, modifier = primary) { Text("Installed") }
+
+            phase == DownloadPhase.DONE && asset.isApk ->
+                Button(onClick = { onAction(item) }, modifier = primary) { Text("Install") }
+
+            phase == DownloadPhase.DONE && !asset.isApk ->
+                FilledTonalButton(onClick = {}, enabled = false, modifier = primary) { Text("Downloaded") }
+
+            asset.isApk && installedApp != null && updatable ->
+                Button(
+                    onClick = { onAction(item) },
+                    modifier = primary,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("Update") }
+
+            else ->
+                Button(onClick = { onAction(item) }, modifier = primary) { Text("Download") }
         }
 
-        installedCurrent ->
-            FilledTonalButton(onClick = {}, enabled = false) { Text("Installed") }
-
-        phase == DownloadPhase.DONE && asset.isApk -> Button(onClick = { onAction(item) }) {
-            Text("Install")
-        }
-
-        phase == DownloadPhase.DONE && !asset.isApk ->
-            FilledTonalButton(onClick = {}, enabled = false) { Text("Downloaded") }
-
-        // Installed but a newer build is available.
-        asset.isApk && installedApp != null && updatable ->
-            Button(
-                onClick = { onAction(item) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = Color.White,
+        if (pkg != null) {
+            OutlinedButton(
+                onClick = { Downloader.uninstall(context, pkg) },
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary,
                 ),
-            ) { Text("Update") }
-
-        else -> FilledTonalButton(onClick = { onAction(item) }) { Text("Download") }
+            ) {
+                Icon(
+                    Icons.Filled.DeleteOutline,
+                    contentDescription = "Uninstall",
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun SourceRowView(s: SourceRef) {
+    val context = LocalContext.current
+    val isLink = s.url != null
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isLink) Modifier.clickable { Downloader.openUrl(context, s.url!!) } else Modifier)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                s.role,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Text(s.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            s.repo?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
+        }
+        if (isLink) {
+            Icon(
+                Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/** Human architecture label from an APK file name. */
+private fun archLabel(name: String): String {
+    val n = name.lowercase()
+    return when {
+        "arm64-v8a" in n || "arm64" in n -> "arm64-v8a"
+        "armeabi-v7a" in n || "arm-v7a" in n -> "armeabi-v7a"
+        "x86_64" in n -> "x86_64"
+        "x86" in n -> "x86"
+        else -> "Universal"
+    }
+}
+
+private fun openApp(context: Context, pkg: String) {
+    context.packageManager.getLaunchIntentForPackage(pkg)?.let { context.startActivity(it) }
 }
