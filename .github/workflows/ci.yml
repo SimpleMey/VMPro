@@ -20,8 +20,9 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest ships the Android SDK; android-actions/setup-android@v3
+      # started failing, so rely on the runner's preinstalled SDK (same fix as
+      # release.yml in c6d014b).
 
       - name: Build debug APK
         run: |
