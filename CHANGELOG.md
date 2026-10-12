@@ -2,6 +2,10 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.1
+- **RVX App and RVX Music now show as installed.** VMPro was checking the wrong package name, so these two never showed their installed or update status even when they were on your device. Fixed.
+- **Download progress fills the button.** On an app page, the Download button now fills with progress as it downloads, instead of showing a separate bar below it.
+
 ## v4.5.0
 - **App pages**: tapping an app now opens a full page with the install button, version and size details, and a Sources section that credits where the build and patches come from.
 - **RVX App and RVX Music** added to the Phone apps, built from Anddea patches.

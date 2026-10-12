@@ -18,13 +18,16 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,6 +91,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -1065,21 +1069,6 @@ private fun AppDetailScreen(
             Spacer(Modifier.height(18.dp))
             DetailActionArea(item, phases, progress, installedApp, updatable, onAction)
 
-            item.asset?.let { asset ->
-                if (phases[asset.downloadUrl] == DownloadPhase.DOWNLOADING) {
-                    Spacer(Modifier.height(12.dp))
-                    @Suppress("DEPRECATION")
-                    LinearProgressIndicator(
-                        progress = (progress[asset.downloadUrl] ?: 0) / 100f,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    )
-                }
-            }
-
             if (d != null) {
                 Spacer(Modifier.height(20.dp))
                 Card(
@@ -1158,15 +1147,7 @@ private fun DetailActionArea(
         val primary = Modifier.weight(1f)
         when {
             phase == DownloadPhase.DOWNLOADING ->
-                FilledTonalButton(onClick = {}, enabled = false, modifier = primary) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Downloading ${progress[asset.downloadUrl] ?: 0}%")
-                }
+                DownloadProgressButton(progress[asset.downloadUrl] ?: 0, primary)
 
             installedCurrent && canOpen ->
                 Button(onClick = { openApp(context, pkg!!) }, modifier = primary) { Text("Open") }
@@ -1206,6 +1187,51 @@ private fun DetailActionArea(
                     contentDescription = "Uninstall",
                     modifier = Modifier.size(18.dp),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * A Download button whose fill advances with [progress] (0..100), shown while a download is in
+ * flight instead of a separate progress bar. The "Downloading NN%" label is drawn twice and
+ * clipped at the fill edge, so it stays readable over both the filled (primary) and unfilled
+ * (faint) parts of the button.
+ */
+@Composable
+private fun DownloadProgressButton(progress: Int, modifier: Modifier = Modifier) {
+    val pct = progress.coerceIn(0, 100)
+    val fraction = pct / 100f
+    val shape = RoundedCornerShape(20.dp)
+    val label = "Downloading $pct%"
+    val style = MaterialTheme.typography.labelLarge
+    BoxWithConstraints(
+        modifier = modifier
+            .height(40.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        val fullWidth = maxWidth
+        // Label over the unfilled track.
+        Text(label, style = style, maxLines = 1, color = MaterialTheme.colorScheme.primary)
+        // Filled portion: solid primary clipped to the progress fraction. The inner box keeps the
+        // full button width so its onPrimary label lines up exactly with the track label above.
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .width(fullWidth * fraction)
+                .fillMaxHeight()
+                .clipToBounds(),
+        ) {
+            Box(
+                Modifier
+                    .requiredWidth(fullWidth)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, style = style, maxLines = 1, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
