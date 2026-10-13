@@ -29,12 +29,12 @@ data class MorpheApp(
 )
 
 val APP_CATALOG: List<MorpheApp> = listOf(
-    MorpheApp("YouTube", R.drawable.ic_youtube, "youtube", "morphe", listOf("app.morphe.android.youtube")),
-    MorpheApp("YT Music", R.drawable.ic_ytmusic, "youtube-music", "morphe", listOf("app.morphe.android.apps.youtube.music")),
+    MorpheApp("YT Morphe", R.drawable.ic_yt_morphe, "youtube", "morphe", listOf("app.morphe.android.youtube")),
+    MorpheApp("Morphe Music", R.drawable.ic_morphe_music, "youtube-music", "morphe", listOf("app.morphe.android.apps.youtube.music")),
     MorpheApp("RVX App", R.drawable.ic_rvx_app, "youtube", "revanced-anddea", listOf("anddea.youtube")),
     MorpheApp("RVX Music", R.drawable.ic_rvx_music, "youtube-music", "revanced-anddea", listOf("anddea.youtube.music")),
     MorpheApp("Twitter", R.drawable.ic_twitter, "x-new", "piko-newx", listOf("com.twitter.android")),
-    MorpheApp("Reddit", R.drawable.ic_reddit, "reddit", "morphe", listOf("com.reddit.frontpage")),
+    MorpheApp("Reddit", R.drawable.ic_reddit, "reddit", "morphe", listOf("com.reddit.frontpage.morphe")),
 )
 
 /**

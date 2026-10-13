@@ -2,6 +2,10 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.3
+- **Renamed** the YouTube build to "YT Morphe" and the YT Music build to "Morphe Music", with new icons.
+- **Reddit** detection now matches the morphe Reddit build (com.reddit.frontpage.morphe) only, so the official Reddit app no longer shows as installed.
+
 ## v4.5.2
 - **Download button polish.** The progress label on the filling Download button now stays centered and readable, instead of showing a misaligned duplicate as it filled.
 
