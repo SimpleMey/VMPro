@@ -2,6 +2,9 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.2
+- **Download button polish.** The progress label on the filling Download button now stays centered and readable, instead of showing a misaligned duplicate as it filled.
+
 ## v4.5.1
 - **RVX App and RVX Music now show as installed.** VMPro was checking the wrong package name, so these two never showed their installed or update status even when they were on your device. Fixed.
 - **Download progress fills the button.** On an app page, the Download button now fills with progress as it downloads, instead of showing a separate bar below it.

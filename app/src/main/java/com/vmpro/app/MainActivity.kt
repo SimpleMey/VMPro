@@ -18,7 +18,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -91,11 +89,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -1205,35 +1204,39 @@ private fun DownloadProgressButton(progress: Int, modifier: Modifier = Modifier)
     val shape = RoundedCornerShape(20.dp)
     val label = "Downloading $pct%"
     val style = MaterialTheme.typography.labelLarge
-    BoxWithConstraints(
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
         modifier = modifier
             .height(40.dp)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+            .background(primary.copy(alpha = 0.16f)),
         contentAlignment = Alignment.Center,
     ) {
-        val fullWidth = maxWidth
-        // Label over the unfilled track.
-        Text(label, style = style, maxLines = 1, color = MaterialTheme.colorScheme.primary)
-        // Filled portion: solid primary clipped to the progress fraction. The inner box keeps the
-        // full button width so its onPrimary label lines up exactly with the track label above.
+        // Solid fill that grows left-to-right with progress.
         Box(
             Modifier
                 .align(Alignment.CenterStart)
-                .width(fullWidth * fraction)
+                .fillMaxWidth(fraction)
                 .fillMaxHeight()
-                .clipToBounds(),
-        ) {
-            Box(
-                Modifier
-                    .requiredWidth(fullWidth)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = style, maxLines = 1, color = MaterialTheme.colorScheme.onPrimary)
-            }
-        }
+                .background(primary),
+        )
+        // The label, centered across the whole button, drawn twice so it stays readable:
+        // primary over the unfilled track, and white over the filled part. Both texts fill the
+        // width and are centered, so they occupy the exact same position; the white one is just
+        // clipped to the fill edge, so each character flips colour as the fill passes it.
+        Text(
+            label, style = style, maxLines = 1, textAlign = TextAlign.Center,
+            color = primary, modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            label, style = style, maxLines = 1, textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawWithContent {
+                    clipRect(right = size.width * fraction) { this@drawWithContent.drawContent() }
+                },
+        )
     }
 }
 
