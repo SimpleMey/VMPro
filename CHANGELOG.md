@@ -2,6 +2,9 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.4
+- **Faster Apps tab.** The app list loads quicker: the Morphe-Builds manifest and the release list are now fetched in parallel instead of one after another, and the response is smaller.
+
 ## v4.5.3
 - **Renamed** the YouTube build to "YT Morphe" and the YT Music build to "Morphe Music", with new icons.
 - **Reddit** detection now matches the morphe Reddit build (com.reddit.frontpage.morphe) only, so the official Reddit app no longer shows as installed.

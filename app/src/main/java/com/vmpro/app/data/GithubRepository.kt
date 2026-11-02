@@ -1,6 +1,8 @@
 package com.vmpro.app.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -84,15 +86,30 @@ class GithubRepository {
 
     // ---- Apps tab: Morphe-Builds (single `latest` release + manifest.json) ----
 
-    /** Fetch the Morphe-Builds release that carries manifest.json and parse the manifest. */
-    suspend fun fetchMorpheBuilds(source: Source): MorpheBuilds = withContext(Dispatchers.IO) {
-        val releases = fetchReleases(source.owner, source.repo, perPage = 3)
+    /** Fetch the Morphe-Builds release that carries manifest.json and parse the manifest.
+     *  The manifest has a stable `releases/latest/download/manifest.json` URL, so we download
+     *  it in PARALLEL with the release list instead of waiting for the list first (two
+     *  sequential round-trips becomes one). Only the latest release is needed. */
+    suspend fun fetchMorpheBuilds(source: Source): MorpheBuilds = coroutineScope {
+        val manifestUrl =
+            "https://github.com/${source.owner}/${source.repo}/releases/latest/download/manifest.json"
+        val entriesDeferred = async(Dispatchers.IO) {
+            runCatching { parseManifest(download(manifestUrl)) }.getOrDefault(emptyMap())
+        }
+        val releasesDeferred = async(Dispatchers.IO) {
+            fetchReleases(source.owner, source.repo, perPage = 1)
+        }
+        val releases = releasesDeferred.await()
         val release = releases.firstOrNull { r -> r.assets.any { it.name == "manifest.json" } }
             ?: releases.firstOrNull()
-        val manifestAsset = release?.assets?.firstOrNull { it.name == "manifest.json" }
-        val entries = manifestAsset?.let {
-            runCatching { parseManifest(download(it.downloadUrl)) }.getOrDefault(emptyMap())
-        } ?: emptyMap()
+        var entries = entriesDeferred.await()
+        if (entries.isEmpty()) {
+            // Stable URL failed (e.g. not marked "Latest"); fall back to the fetched release's asset.
+            val manifestAsset = release?.assets?.firstOrNull { it.name == "manifest.json" }
+            entries = manifestAsset?.let {
+                runCatching { parseManifest(download(it.downloadUrl)) }.getOrDefault(emptyMap())
+            } ?: emptyMap()
+        }
         MorpheBuilds(release, entries)
     }
 
