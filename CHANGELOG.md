@@ -2,9 +2,6 @@
 
 All notable changes to VMPro, newest first.
 
-## v4.5.7
-- **Material You.** On Android 12 and newer, VMPro themes itself from your wallpaper colors. Older devices keep the blue theme.
-
 ## v4.5.6
 - **Silent install with Shizuku.** If you run Shizuku, turn it on in Settings, Security to install and update apps without the system prompt. Without Shizuku, the normal installer is used exactly as before.
 
