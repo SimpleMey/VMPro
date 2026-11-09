@@ -8,7 +8,7 @@ A lightweight Android app that surfaces **publicly available** release downloads
 GitHub and lets you grab and install them on-device. Built from scratch in Kotlin +
 Jetpack Compose, original code, not derived from any existing manager app.
 
-App name **VMPro** · versionName **4.5.7** · website **https://vmpro.app**
+App name **VMPro** · versionName **4.5.8** · website **https://vmpro.app**
 
 > We build this manager from scratch; we only add publicly available links from GitHub
 > projects: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module),
@@ -52,8 +52,8 @@ The **TV** section lists Android TV apps with D-pad navigation:
   installer is used.
 - **Verify on VirusTotal** — add your own free VirusTotal API key in Settings, then check a
   downloaded APK against VirusTotal (a hash lookup, no upload) before installing.
-- **Material You** — themes from your wallpaper on Android 12 and newer; older devices keep
-  the blue theme.
+- **Material 3 theme** — a full Material 3 palette built from VMPro's brand blue, consistent
+  on every device and Android version.
 - **Settings** — Downloads, dark mode, VirusTotal key, silent install, My device
   (manufacturer, architecture, storage, Android version), an FAQ, and About.
 
@@ -88,7 +88,7 @@ app/src/main/java/com/vmpro/app/
   ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download/install, VirusTotal
   ui/SettingsScreen.kt         # Settings: Downloads, Security (VirusTotal key, Shizuku), FAQ, About
   ui/SharePrompt.kt            # Share-the-app prompt
-  ui/Theme.kt                  # Material 3 theme + Material You (dynamic color on Android 12+)
+  ui/Theme.kt                  # Material 3 theme (brand-seeded tonal palette)
   util/DownloadController.kt   # DownloadManager + progress / completion tracking
   util/Downloads.kt            # Enumerate / delete downloaded files, APK SHA-256
   util/Downloader.kt           # Open URL, share APK, uninstall (PackageInstaller)
@@ -147,5 +147,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/vmpro-4.5.7.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.5.8.apk
 ```

@@ -1,68 +1,28 @@
 package com.vmpro.app.ui
 
 import android.content.Context
-import android.os.Build
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import com.materialkolor.PaletteStyle
+import com.materialkolor.rememberDynamicColorScheme
 
-private val Brand = Color(0xFF2979FF)
-private val BrandDark = Color(0xFF1565C0)
-
-private val DarkColors = darkColorScheme(
-    primary = Brand,
-    onPrimary = Color.White,
-    secondary = Color(0xFF64B5F6),
-    background = Color(0xFF0F1419),
-    surface = Color(0xFF161B22),
-    onBackground = Color(0xFFE6EDF3),
-    onSurface = Color(0xFFE6EDF3),
-    surfaceVariant = Color(0xFF1E2530),
-    primaryContainer = Color(0xFF13315C),
-    onPrimaryContainer = Color(0xFFD6E7FF),
-    secondaryContainer = Color(0xFF1B3A5C),
-    onSecondaryContainer = Color(0xFFCFE3FF),
-)
-
-// Light scheme with a grey backdrop so white cards/top bar/nav actually stand out.
-private val LightColors = lightColorScheme(
-    primary = BrandDark,
-    onPrimary = Color.White,
-    secondary = Color(0xFF1976D2),
-    onSecondary = Color.White,
-    background = Color(0xFFF3F5F9),
-    onBackground = Color(0xFF141A20),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF141A20),
-    surfaceVariant = Color(0xFFE7ECF2),
-    onSurfaceVariant = Color(0xFF48525C),
-    primaryContainer = Color(0xFFD6E7FF),
-    onPrimaryContainer = Color(0xFF0A2A50),
-    secondaryContainer = Color(0xFFDCEBFF),
-    onSecondaryContainer = Color(0xFF0A2A50),
-    outline = Color(0xFFC3CBD4),
-)
+// Brand seed colour. Every tone in the Material 3 palette is generated from this, so the whole
+// app stays on-brand and identical on every device and Android version (no wallpaper theming).
+private val BrandSeed = Color(0xFF2979FF)
 
 @Composable
 fun VmproTheme(
     darkTheme: Boolean,
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    // Material You: pull the palette from the wallpaper on Android 12+; fall back to the brand
-    // blue on older devices (which have no dynamic color).
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
+    // A full Material 3 tonal palette generated from the brand seed (Google's HCT algorithm,
+    // same one Material You uses) — but always from our colour, never the device wallpaper.
+    val colorScheme = rememberDynamicColorScheme(
+        seedColor = BrandSeed,
+        isDark = darkTheme,
+        style = PaletteStyle.TonalSpot,
+    )
     MaterialTheme(
         colorScheme = colorScheme,
         content = content,
