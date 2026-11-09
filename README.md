@@ -8,7 +8,7 @@ A lightweight Android app that surfaces **publicly available** release downloads
 GitHub and lets you grab and install them on-device. Built from scratch in Kotlin +
 Jetpack Compose, original code, not derived from any existing manager app.
 
-App name **VMPro** · versionName **4.5.3** · website **https://vmpro.app**
+App name **VMPro** · versionName **4.5.6** · website **https://vmpro.app**
 
 > We build this manager from scratch; we only add publicly available links from GitHub
 > projects: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module),
@@ -41,17 +41,35 @@ The **TV** section lists Android TV apps with D-pad navigation:
 
 ### Highlights
 
-- **Automatic architecture** — detects the device CPU (arm64-v8a, armeabi-v7a, x86) and
+- **Automatic architecture**: detects the device CPU (arm64-v8a, armeabi-v7a, x86) and
   downloads the matching build for apps, MicroG, and TV apps, so you never pick the wrong one.
-- **Per-app install pages** — tap a row to open a page with the install button, version and
+- **Per-app install pages**: tap a row to open a page with the install button, version and
   size, and a Sources section crediting the build pipeline and the patch authors.
-- **Install state** — shows Installed / Open / Update per app, including patch-only updates
+- **Install state**: shows Installed / Open / Update per app, including patch-only updates
   (same base app version, newer patches).
-- **Settings** — Downloads (see and delete what you downloaded), a dark-mode switch,
-  My device (manufacturer, architecture, storage, Android version), an FAQ, and About.
+- **Silent install (optional)**: with [Shizuku](https://shizuku.rikka.app) running, enable it
+  in Settings to install and update without the system prompt. Without Shizuku, the normal
+  installer is used.
+- **Verify on VirusTotal**: add your own free VirusTotal API key in Settings, then check a
+  downloaded APK against VirusTotal (a hash lookup, no upload) before installing.
+- **Settings**: Downloads, dark mode, VirusTotal key, silent install, My device
+  (manufacturer, architecture, storage, Android version), an FAQ, and About.
 
 The app never hosts, builds, or modifies any file. Every download comes straight from a
 public GitHub release.
+
+## Is VMPro safe?
+
+Yes. VMPro is open source and built in public by GitHub Actions, so anyone can read the code
+and verify that the release APK matches it. It collects no personal data (only coarse,
+anonymous usage counts via PostHog, which you can disable), and it does not host, build, or
+modify any app.
+
+**About the Google Play Protect warning:** Play Protect flags *any* app that can install other
+apps as potentially harmful. This is a known false positive for app managers (the official
+ReVanced Manager gets the same warning), not a sign of a virus. To install, tap *More details*
+then *Install anyway*. You can also add a free VirusTotal API key in Settings and use *Verify
+on VirusTotal* to scan a download yourself.
 
 ## Project layout
 
@@ -65,14 +83,18 @@ app/src/main/java/com/vmpro/app/
   data/Catalog.kt              # Curated app list + device-arch matching rules
   data/GithubRepository.kt     # OkHttp fetch + latest / arch-aware asset resolution
   data/InstalledPatchStore.kt  # Tracks installed base + patch version (patch-only updates)
-  ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download/install actions
-  ui/SettingsScreen.kt         # Settings: Downloads, My device, FAQ, About (all inline)
+  ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download/install, VirusTotal
+  ui/SettingsScreen.kt         # Settings: Downloads, Security (VirusTotal key, Shizuku), FAQ, About
   ui/SharePrompt.kt            # Share-the-app prompt
   ui/Theme.kt                  # Material 3 theme (blue)
   util/DownloadController.kt   # DownloadManager + progress / completion tracking
-  util/Downloads.kt            # Enumerate / delete downloaded files
+  util/Downloads.kt            # Enumerate / delete downloaded files, APK SHA-256
   util/Downloader.kt           # Open URL, share APK, uninstall (PackageInstaller)
+  util/VtPrefs.kt              # Per-device VirusTotal key + silent-install preference
+  util/ShizukuInstaller.kt     # Optional silent install via Shizuku (graceful fallback)
+  util/ShizukuUserService.kt   # Shizuku user service: pm install with shell privileges
   util/UninstallReceiver.kt    # Receives uninstall result -> confirm dialog
+aidl/com/vmpro/app/IShizukuUserService.aidl   # Shizuku user-service interface
 ```
 
 ## Building
@@ -123,5 +145,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/vmpro-4.5.3.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.5.6.apk
 ```
