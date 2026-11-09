@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
@@ -48,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -77,6 +79,7 @@ import com.vmpro.app.data.formatBytes
 import com.vmpro.app.util.DownloadedFile
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadsRepo
+import com.vmpro.app.util.VtPrefs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,6 +142,60 @@ fun SettingsScreen(
                         ),
                     )
                 }
+            }
+
+            GroupLabel("Security")
+            var vtDialog by remember { mutableStateOf(false) }
+            var vtKey by remember { mutableStateOf(VtPrefs.key(context)) }
+            SettingRow(
+                icon = Icons.Filled.Security,
+                title = "VirusTotal API key",
+                subtitle = if (vtKey.isBlank())
+                    "Not set. Add a free key to verify downloads."
+                else
+                    "Key added. Use Verify on VirusTotal on an app page.",
+                onClick = { vtDialog = true },
+            )
+            if (vtDialog) {
+                var draft by remember { mutableStateOf(vtKey) }
+                AlertDialog(
+                    onDismissRequest = { vtDialog = false },
+                    title = { Text("VirusTotal API key") },
+                    text = {
+                        Column {
+                            Text(
+                                "Paste your own free VirusTotal API key. Each user uses their own " +
+                                    "key, so there is no shared limit. Get one free at virustotal.com " +
+                                    "(your profile, API key).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = draft,
+                                onValueChange = { draft = it },
+                                singleLine = true,
+                                label = { Text("API key") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            VtPrefs.setKey(context, draft)
+                            vtKey = draft.trim()
+                            vtDialog = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            VtPrefs.setKey(context, "")
+                            vtKey = ""
+                            draft = ""
+                            vtDialog = false
+                        }) { Text("Clear") }
+                    },
+                )
             }
 
             GroupLabel("My device")
@@ -553,10 +610,16 @@ private val FAQ = listOf(
         "Yes. VMPro is open source and built in public by GitHub Actions, so anyone can read the " +
             "code and verify the build. Google Play Protect warns about any app that can install " +
             "other apps, which is a known false positive for app managers, not a sign of a virus. " +
-            "After downloading an app you can also tap Verify on VirusTotal to scan it. To install " +
-            "past the warning, tap More details, then Install anyway.",
+            "You can also add a free VirusTotal API key in Settings, then tap Verify on VirusTotal " +
+            "after downloading an app. To install past the warning, tap More details, then Install anyway.",
         "github.com/SimpleMey/VMPro",
         "https://github.com/SimpleMey/VMPro",
+    ),
+    Faq(
+        "Does VMPro store my VirusTotal API key?",
+        "Your key is saved only on your device, in VMPro's private storage. It is sent only to " +
+            "VirusTotal when you verify a file, and never to VMPro or anyone else. You can change " +
+            "or clear it anytime in Settings.",
     ),
     Faq(
         "How does VMPro build apps?",

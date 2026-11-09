@@ -7,7 +7,19 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+
+/** Result of a VirusTotal hash lookup. */
+sealed class VtOutcome {
+    /** [flagged] of [total] engines flagged the file (flagged == 0 means clean). */
+    data class Found(val flagged: Int, val total: Int) : VtOutcome()
+    /** No one has scanned this exact file yet (common for a freshly built APK). */
+    object NotFound : VtOutcome()
+    object BadKey : VtOutcome()
+    object RateLimited : VtOutcome()
+    data class Error(val code: Int) : VtOutcome()
+}
 
 /**
  * Fetches releases for any public GitHub repository via the REST API.
@@ -41,6 +53,37 @@ class GithubRepository {
             parseReleases(body)
         }
     }
+
+    /**
+     * Look up a file's VirusTotal report by SHA-256 using the user's own API key (a hash lookup,
+     * not an upload). Returns [VtOutcome.NotFound] when no one has scanned that exact file yet.
+     */
+    suspend fun virusTotalLookup(apiKey: String, sha256: String): VtOutcome =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("https://www.virustotal.com/api/v3/files/$sha256")
+                .header("x-apikey", apiKey)
+                .header("Accept", "application/json")
+                .build()
+            client.newCall(request).execute().use { resp ->
+                when (resp.code) {
+                    200 -> {
+                        val stats = JSONObject(resp.body?.string().orEmpty())
+                            .getJSONObject("data").getJSONObject("attributes")
+                            .getJSONObject("last_analysis_stats")
+                        val flagged = stats.optInt("malicious") + stats.optInt("suspicious")
+                        val total = flagged + stats.optInt("harmless") + stats.optInt("undetected") +
+                            stats.optInt("timeout") + stats.optInt("failure") +
+                            stats.optInt("type-unsupported")
+                        VtOutcome.Found(flagged, total)
+                    }
+                    404 -> VtOutcome.NotFound
+                    401 -> VtOutcome.BadKey
+                    429 -> VtOutcome.RateLimited
+                    else -> VtOutcome.Error(resp.code)
+                }
+            }
+        }
 
     /** Fetch a text file (e.g. the Morphe-Builds manifest.json) over HTTP. */
     private fun download(url: String): String =

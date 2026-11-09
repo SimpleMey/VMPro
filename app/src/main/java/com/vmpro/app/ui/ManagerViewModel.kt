@@ -27,7 +27,9 @@ import com.vmpro.app.data.sameVersionFamily
 import com.vmpro.app.data.versionOf
 import com.vmpro.app.util.DownloadController
 import com.vmpro.app.util.DownloadPhase
+import com.vmpro.app.data.VtOutcome
 import com.vmpro.app.util.Downloader
+import com.vmpro.app.util.VtPrefs
 import com.vmpro.app.util.fileSha256
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -193,27 +195,47 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Open the downloaded APK's VirusTotal report so the user can verify it before installing.
-     * We hash the file locally and open its report by hash: no upload, nothing per build. If the
-     * file has not been scanned by anyone yet, VirusTotal shows "not found" (common for a freshly
-     * built APK); for VMPro itself and widely shared builds it shows the clean scan.
+     * Check the downloaded APK on VirusTotal using the user's own API key (set in Settings) and
+     * show the result in a toast. It is a hash lookup, not an upload, so nothing is sent per build;
+     * a freshly built APK that no one has scanned yet comes back as "not on VirusTotal yet".
      */
     fun verifyOnVirusTotal(item: CatalogItem) {
         val asset = item.asset ?: return
         val ctx = getApplication<Application>()
+        val key = VtPrefs.key(ctx)
+        if (key.isBlank()) {
+            Toast.makeText(
+                ctx, "Add your VirusTotal API key in Settings to check files.", Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         val uri = downloads.localUri(asset.downloadUrl)
         if (uri == null) {
             Toast.makeText(ctx, "Download the app first, then verify.", Toast.LENGTH_SHORT).show()
             return
         }
-        Toast.makeText(ctx, "Preparing VirusTotal check...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, "Checking on VirusTotal...", Toast.LENGTH_SHORT).show()
         viewModelScope.launch {
             val hash = withContext(Dispatchers.IO) { fileSha256(ctx, uri) }
             if (hash == null) {
                 Toast.makeText(ctx, "Could not read the APK.", Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            Downloader.openUrl(ctx, "https://www.virustotal.com/gui/file/$hash")
+            val outcome = runCatching { repository.virusTotalLookup(key, hash) }.getOrNull()
+            val msg = when (outcome) {
+                is VtOutcome.Found ->
+                    if (outcome.flagged == 0)
+                        "VirusTotal: clean. 0 of ${outcome.total} engines flagged it."
+                    else
+                        "VirusTotal: ${outcome.flagged} of ${outcome.total} engines flagged this file."
+                VtOutcome.NotFound ->
+                    "This exact file is not on VirusTotal yet. Freshly built APKs often are not."
+                VtOutcome.BadKey -> "VirusTotal rejected the key. Check it in Settings."
+                VtOutcome.RateLimited -> "VirusTotal rate limit reached. Try again shortly."
+                is VtOutcome.Error -> "VirusTotal check failed (code ${outcome.code})."
+                null -> "Could not reach VirusTotal. Check your connection."
+            }
+            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
         }
     }
 
