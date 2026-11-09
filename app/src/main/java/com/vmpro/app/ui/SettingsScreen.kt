@@ -1,6 +1,7 @@
 package com.vmpro.app.ui
 
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
@@ -79,6 +81,7 @@ import com.vmpro.app.data.formatBytes
 import com.vmpro.app.util.DownloadedFile
 import com.vmpro.app.util.Downloader
 import com.vmpro.app.util.DownloadsRepo
+import com.vmpro.app.util.ShizukuInstaller
 import com.vmpro.app.util.VtPrefs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -196,6 +199,48 @@ fun SettingsScreen(
                         }) { Text("Clear") }
                     },
                 )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            var shizukuOn by remember { mutableStateOf(VtPrefs.shizukuInstall(context)) }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconTile(Icons.Filled.Bolt)
+                    Spacer(Modifier.width(13.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Silent install (Shizuku)", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Install without the system prompt. Requires Shizuku running.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                    Switch(
+                        checked = shizukuOn,
+                        onCheckedChange = { want ->
+                            if (want && !ShizukuInstaller.isRunning()) {
+                                Toast.makeText(
+                                    context, "Start Shizuku first, then enable this.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            } else {
+                                if (want && !ShizukuInstaller.hasPermission()) {
+                                    ShizukuInstaller.requestPermission()
+                                }
+                                VtPrefs.setShizukuInstall(context, want)
+                                shizukuOn = want
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
             }
 
             GroupLabel("My device")

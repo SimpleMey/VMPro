@@ -30,8 +30,8 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 53
-        versionName = "4.5.5"
+        versionCode = 54
+        versionName = "4.5.6"
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
@@ -81,6 +81,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
@@ -111,6 +112,11 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Shizuku: optional silent (no-prompt) install for users who run Shizuku. The app degrades
+    // gracefully to the normal system installer when Shizuku is absent or not permitted.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 
     // Background blur ("frosted glass") for the bottom bar — 0.7.3 targets Compose 1.6 /
     // Kotlin 1.9; blurs on Android 12+, degrades to the tint on older devices.

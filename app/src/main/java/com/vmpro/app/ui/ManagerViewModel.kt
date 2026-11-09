@@ -29,6 +29,7 @@ import com.vmpro.app.util.DownloadController
 import com.vmpro.app.util.DownloadPhase
 import com.vmpro.app.data.VtOutcome
 import com.vmpro.app.util.Downloader
+import com.vmpro.app.util.ShizukuInstaller
 import com.vmpro.app.util.VtPrefs
 import com.vmpro.app.util.fileSha256
 import kotlinx.coroutines.async
@@ -251,6 +252,34 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
             _conflict.value = ConflictInfo(installedPkg!!, asset, item.label)
         } else {
             recordPatch(item)
+            doInstall(asset)
+        }
+    }
+
+    /**
+     * Install silently via Shizuku when the user enabled it and Shizuku is available; otherwise
+     * launch the normal system installer. On a Shizuku failure we surface the error and leave the
+     * normal installer as the manual retry (the user can just tap Install again).
+     */
+    private fun doInstall(asset: Asset) {
+        val ctx = getApplication<Application>()
+        if (VtPrefs.shizukuInstall(ctx) && ShizukuInstaller.available()) {
+            val uri = downloads.localUri(asset.downloadUrl)
+            if (uri == null) {
+                downloads.install(asset)
+                return
+            }
+            Toast.makeText(ctx, "Installing with Shizuku...", Toast.LENGTH_SHORT).show()
+            viewModelScope.launch {
+                val (ok, msg) = ShizukuInstaller.install(ctx, uri)
+                Toast.makeText(
+                    ctx,
+                    if (ok) "Installed." else "Shizuku install failed: $msg",
+                    if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+                ).show()
+                refreshInstalled()
+            }
+        } else {
             downloads.install(asset)
         }
     }
@@ -275,7 +304,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun installAnyway() {
-        _conflict.value?.let { downloads.install(it.asset) }
+        _conflict.value?.let { doInstall(it.asset) }
         _conflict.value = null
     }
 

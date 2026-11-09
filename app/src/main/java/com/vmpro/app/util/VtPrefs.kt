@@ -9,12 +9,21 @@ import android.content.Context
 object VtPrefs {
     private const val FILE = "vmpro_settings"
     private const val KEY = "virustotal_api_key"
+    private const val SHIZUKU = "shizuku_install"
 
-    fun key(context: Context): String =
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY, "").orEmpty()
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    fun key(context: Context): String = prefs(context).getString(KEY, "").orEmpty()
 
     fun setKey(context: Context, value: String) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-            .putString(KEY, value.trim()).apply()
+        prefs(context).edit().putString(KEY, value.trim()).apply()
+    }
+
+    /** User chose to install silently via Shizuku (used only when Shizuku is actually available). */
+    fun shizukuInstall(context: Context): Boolean = prefs(context).getBoolean(SHIZUKU, false)
+
+    fun setShizukuInstall(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean(SHIZUKU, on).apply()
     }
 }

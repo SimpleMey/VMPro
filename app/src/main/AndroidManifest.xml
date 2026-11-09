@@ -8,6 +8,8 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Optional: silent install through Shizuku when the user runs it. -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <!-- Runs on phones and Android TV (D-pad). Neither feature is required, so the app
          installs on both; a touchscreen is explicitly optional for TV devices. -->
@@ -74,5 +76,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Shizuku binder provider (required by the Shizuku API). -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 </manifest>
