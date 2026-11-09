@@ -30,8 +30,8 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 56
-        versionName = "4.5.8"
+        versionCode = 55
+        versionName = "4.5.7"
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
@@ -112,10 +112,6 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // Generates a full Material 3 tonal palette from a seed colour (our brand blue).
-    // 1.4.x targets Compose 1.6 / Kotlin 1.9, matching this project's toolchain.
-    implementation("com.materialkolor:material-kolor:1.4.4")
 
     // Shizuku: optional silent (no-prompt) install for users who run Shizuku. The app degrades
     // gracefully to the normal system installer when Shizuku is absent or not permitted.

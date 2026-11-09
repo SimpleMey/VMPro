@@ -2,9 +2,6 @@
 
 All notable changes to VMPro, newest first.
 
-## v4.5.8
-- **Material 3 theme.** VMPro now builds a full Material 3 color palette from its brand blue, so the whole app looks consistent on every device and Android version.
-
 ## v4.5.7
 - **Material You.** On Android 12 and newer, VMPro themes itself from your wallpaper colors. Older devices keep the blue theme.
 
