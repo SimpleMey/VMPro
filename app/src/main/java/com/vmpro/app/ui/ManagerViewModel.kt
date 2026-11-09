@@ -1,6 +1,7 @@
 package com.vmpro.app.ui
 
 import android.app.Application
+import android.widget.Toast
 import android.content.pm.PackageManager
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.AndroidViewModel
@@ -27,6 +28,7 @@ import com.vmpro.app.data.versionOf
 import com.vmpro.app.util.DownloadController
 import com.vmpro.app.util.DownloadPhase
 import com.vmpro.app.util.Downloader
+import com.vmpro.app.util.fileSha256
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -34,7 +36,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // Inner tabs shown inside the "Apps" bottom destination.
 const val TAB_APPS = 0
@@ -185,6 +189,31 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
             DownloadPhase.DONE -> if (asset.isApk) attemptInstall(item)
             DownloadPhase.DOWNLOADING -> Unit
             else -> downloads.download(asset)
+        }
+    }
+
+    /**
+     * Open the downloaded APK's VirusTotal report so the user can verify it before installing.
+     * We hash the file locally and open its report by hash: no upload, nothing per build. If the
+     * file has not been scanned by anyone yet, VirusTotal shows "not found" (common for a freshly
+     * built APK); for VMPro itself and widely shared builds it shows the clean scan.
+     */
+    fun verifyOnVirusTotal(item: CatalogItem) {
+        val asset = item.asset ?: return
+        val ctx = getApplication<Application>()
+        val uri = downloads.localUri(asset.downloadUrl)
+        if (uri == null) {
+            Toast.makeText(ctx, "Download the app first, then verify.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(ctx, "Preparing VirusTotal check...", Toast.LENGTH_SHORT).show()
+        viewModelScope.launch {
+            val hash = withContext(Dispatchers.IO) { fileSha256(ctx, uri) }
+            if (hash == null) {
+                Toast.makeText(ctx, "Could not read the APK.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            Downloader.openUrl(ctx, "https://www.virustotal.com/gui/file/$hash")
         }
     }
 

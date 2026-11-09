@@ -413,6 +413,7 @@ fun ManagerScreen(
             installedPatches = installedPatches,
             replaceNotice = microgReplaceNotice(item, installed, states),
             onAction = viewModel::onAction,
+            onVerify = viewModel::verifyOnVirusTotal,
             onBack = { detailItem = null },
         )
     } else {
@@ -1005,6 +1006,7 @@ private fun AppDetailScreen(
     installedPatches: Map<String, String>,
     replaceNotice: String? = null,
     onAction: (CatalogItem) -> Unit,
+    onVerify: (CatalogItem) -> Unit,
     onBack: () -> Unit,
 ) {
     val installedApp = resolveInstalled(item, installed)
@@ -1067,6 +1069,15 @@ private fun AppDetailScreen(
 
             Spacer(Modifier.height(18.dp))
             DetailActionArea(item, phases, progress, installedApp, updatable, onAction)
+
+            item.asset?.let { asset ->
+                if (asset.isApk && phases[asset.downloadUrl] == DownloadPhase.DONE) {
+                    TextButton(
+                        onClick = { onVerify(item) },
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    ) { Text("Verify on VirusTotal") }
+                }
+            }
 
             if (d != null) {
                 Spacer(Modifier.height(20.dp))

@@ -166,6 +166,9 @@ class DownloadController(context: Context) {
         }
     }
 
+    /** Local file URI of a finished download (this session), or null if it hasn't downloaded. */
+    fun localUri(url: String): Uri? = urlToLocalUri[url]
+
     private fun setPhase(url: String, phase: DownloadPhase) {
         _phases.update { it + (url to phase) }
     }

@@ -549,6 +549,16 @@ private data class Faq(
 private val FAQ = listOf(
     Faq("What is VMPro?", "A simple manager for apps hosted in GitHub repos."),
     Faq(
+        "Is VMPro safe? Play Protect warns about it.",
+        "Yes. VMPro is open source and built in public by GitHub Actions, so anyone can read the " +
+            "code and verify the build. Google Play Protect warns about any app that can install " +
+            "other apps, which is a known false positive for app managers, not a sign of a virus. " +
+            "After downloading an app you can also tap Verify on VirusTotal to scan it. To install " +
+            "past the warning, tap More details, then Install anyway.",
+        "github.com/SimpleMey/VMPro",
+        "https://github.com/SimpleMey/VMPro",
+    ),
+    Faq(
         "How does VMPro build apps?",
         "VMPro does not build any app. It fetches publicly available apps from GitHub repos.",
     ),

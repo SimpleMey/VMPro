@@ -30,8 +30,8 @@ android {
         applicationId = "com.vmpro.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 52
-        versionName = "4.5.4"
+        versionCode = 53
+        versionName = "4.5.5"
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")

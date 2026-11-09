@@ -2,10 +2,27 @@ package com.vmpro.app.util
 
 import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
 import androidx.core.content.getSystemService
+import java.security.MessageDigest
 
 /** A finished download VMPro created, read back from the system [DownloadManager]. */
 data class DownloadedFile(val id: Long, val name: String, val bytes: Long)
+
+/** Lowercase hex SHA-256 of the file at [uri], or null if it can't be read. Streams the file,
+ *  so it is safe for large APKs. Call off the main thread. */
+fun fileSha256(context: Context, uri: Uri): String? = runCatching {
+    val md = MessageDigest.getInstance("SHA-256")
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        val buffer = ByteArray(1 shl 16)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            md.update(buffer, 0, read)
+        }
+    } ?: return@runCatching null
+    md.digest().joinToString("") { "%02x".format(it) }
+}.getOrNull()
 
 /**
  * Lists and deletes the files VMPro downloaded. [DownloadManager] scopes both its queries and
