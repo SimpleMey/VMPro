@@ -4,11 +4,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Result of a VirusTotal hash lookup. */
 sealed class VtOutcome {
@@ -28,19 +31,33 @@ class CacheMissException : RuntimeException()
  * Fetches releases for any public GitHub repository via the REST API.
  * No token is required for public, low-volume access (60 req/h per IP).
  *
- * When a [DiskCache] is supplied, the Apps-tab fetches can run "cache-first": return the last
- * saved response instantly (for a no-spinner first paint) and refresh from the network after.
+ * To live within that 60/hour limit two caches work together:
+ *  - an OkHttp HTTP cache, so repeat calls revalidate with ETags; GitHub answers unchanged data
+ *    with `304 Not Modified`, which does NOT count against the rate limit;
+ *  - a [DiskCache] of the last good response body per endpoint, so the Apps tab can paint
+ *    instantly ("cache-first") and, when the limit is still hit (HTTP 403), every tab falls back
+ *    to its last list instead of showing an error.
  */
-class GithubRepository(private val cache: DiskCache? = null) {
+class GithubRepository(cacheDir: File? = null) {
+    private val cache: DiskCache? = cacheDir?.let { DiskCache(it) }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
+        .apply {
+            // 5 MB is plenty for small JSON release listings; enables ETag revalidation (free 304s).
+            if (cacheDir != null) cache(Cache(File(cacheDir, "http-cache"), 5L * 1024 * 1024))
+        }
         .build()
 
     /**
      * Core GET-as-text. With [cacheFirst] it returns the cached body for [cacheKey] and never
      * touches the network (throws [CacheMissException] when nothing is cached). Otherwise it
      * fetches over the network and, when a [cacheKey] is given, saves the body for next time.
+     *
+     * On a network failure (no connection, or GitHub's 403 rate limit) it returns the last saved
+     * body for [cacheKey] when there is one, so the user keeps seeing the previous list instead of
+     * an error; only a first-ever failure with nothing cached propagates.
      */
     private fun getString(
         url: String,
@@ -51,17 +68,24 @@ class GithubRepository(private val cache: DiskCache? = null) {
         if (cacheFirst) {
             return (cacheKey?.let { cache?.read(it) }) ?: throw CacheMissException()
         }
-        val builder = Request.Builder().url(url).header("User-Agent", "VMPro-App")
-        if (accept != null) builder.header("Accept", accept)
-        client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                val hint = if (response.code == 403)
-                    " (GitHub rate limit reached — try again later)" else ""
-                throw RuntimeException("GitHub API error ${response.code}$hint")
+        try {
+            val builder = Request.Builder().url(url).header("User-Agent", "VMPro-App")
+            if (accept != null) builder.header("Accept", accept)
+            client.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val hint = if (response.code == 403)
+                        " (GitHub rate limit reached — try again later)" else ""
+                    throw RuntimeException("GitHub API error ${response.code}$hint")
+                }
+                val body = response.body?.string().orEmpty()
+                if (cacheKey != null) cache?.write(cacheKey, body)
+                return body
             }
-            val body = response.body?.string().orEmpty()
-            if (cacheKey != null) cache?.write(cacheKey, body)
-            return body
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            (cacheKey?.let { cache?.read(it) })?.let { return it }
+            throw e
         }
     }
 
@@ -76,7 +100,9 @@ class GithubRepository(private val cache: DiskCache? = null) {
         cacheFirst: Boolean = false,
     ): List<Release> = withContext(Dispatchers.IO) {
         val url = "https://api.github.com/repos/$owner/$repo/releases?per_page=$perPage"
-        parseReleases(getString(url, "application/vnd.github+json", cacheKey, cacheFirst))
+        // Every endpoint gets a cache key by default, so a 403 falls back to its last response.
+        val key = cacheKey ?: "rel.$owner.$repo.$perPage"
+        parseReleases(getString(url, "application/vnd.github+json", key, cacheFirst))
     }
 
     /**

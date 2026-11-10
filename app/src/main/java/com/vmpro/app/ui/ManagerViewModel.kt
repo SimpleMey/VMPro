@@ -11,7 +11,6 @@ import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.data.APP_CATALOG
 import com.vmpro.app.data.Asset
 import com.vmpro.app.data.CacheMissException
-import com.vmpro.app.data.DiskCache
 import com.vmpro.app.data.GithubRepository
 import com.vmpro.app.data.InstalledPatchStore
 import com.vmpro.app.data.J_HC
@@ -109,7 +108,7 @@ sealed interface TabState {
 
 class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = GithubRepository(DiskCache(app.cacheDir))
+    private val repository = GithubRepository(app.cacheDir)
     private val pm: PackageManager = app.packageManager
     val downloads = DownloadController(app).also { it.register() }
 
