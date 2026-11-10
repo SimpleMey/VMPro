@@ -29,6 +29,8 @@
         <package android:name="app.revanced.android.gms" />
         <!-- NewTube (phone) -->
         <package android:name="io.github.aleixrodriala.arc" />
+        <!-- Flow (phone) -->
+        <package android:name="io.github.aedev.flow" />
         <!-- Android TV apps shown in the TV tab -->
         <package android:name="org.smarttube.stable" />
         <package android:name="app.smarttube" />

@@ -164,6 +164,11 @@ val PHONE_DIRECT: List<TvEntry> = listOf(
         owner = "aleixrodriala", repo = "newtube",
         packages = listOf("io.github.aleixrodriala.arc"),
     ),
+    TvEntry(
+        "Flow", "YouTube and Music client", R.drawable.ic_flow,
+        owner = "Flow-Tube", repo = "Flow",
+        packages = listOf("io.github.aedev.flow"),
+    ),
 )
 
 // ---------------------------------------------------------------------------------------------

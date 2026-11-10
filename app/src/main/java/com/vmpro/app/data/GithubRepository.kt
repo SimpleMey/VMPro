@@ -21,37 +21,62 @@ sealed class VtOutcome {
     data class Error(val code: Int) : VtOutcome()
 }
 
+/** Thrown by a cache-first read when nothing is cached yet, so callers can fall through. */
+class CacheMissException : RuntimeException()
+
 /**
  * Fetches releases for any public GitHub repository via the REST API.
  * No token is required for public, low-volume access (60 req/h per IP).
+ *
+ * When a [DiskCache] is supplied, the Apps-tab fetches can run "cache-first": return the last
+ * saved response instantly (for a no-spinner first paint) and refresh from the network after.
  */
-class GithubRepository {
+class GithubRepository(private val cache: DiskCache? = null) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    suspend fun fetchReleases(source: Source, perPage: Int = 40): List<Release> =
-        fetchReleases(source.owner, source.repo, perPage)
-
-    suspend fun fetchReleases(owner: String, repo: String, perPage: Int = 40): List<Release> =
-        withContext(Dispatchers.IO) {
-        val url = "https://api.github.com/repos/$owner/$repo/releases?per_page=$perPage"
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "VMPro-App")
-            .build()
-
-        client.newCall(request).execute().use { response ->
+    /**
+     * Core GET-as-text. With [cacheFirst] it returns the cached body for [cacheKey] and never
+     * touches the network (throws [CacheMissException] when nothing is cached). Otherwise it
+     * fetches over the network and, when a [cacheKey] is given, saves the body for next time.
+     */
+    private fun getString(
+        url: String,
+        accept: String? = null,
+        cacheKey: String? = null,
+        cacheFirst: Boolean = false,
+    ): String {
+        if (cacheFirst) {
+            return (cacheKey?.let { cache?.read(it) }) ?: throw CacheMissException()
+        }
+        val builder = Request.Builder().url(url).header("User-Agent", "VMPro-App")
+        if (accept != null) builder.header("Accept", accept)
+        client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) {
                 val hint = if (response.code == 403)
                     " (GitHub rate limit reached — try again later)" else ""
                 throw RuntimeException("GitHub API error ${response.code}$hint")
             }
             val body = response.body?.string().orEmpty()
-            parseReleases(body)
+            if (cacheKey != null) cache?.write(cacheKey, body)
+            return body
         }
+    }
+
+    suspend fun fetchReleases(source: Source, perPage: Int = 40): List<Release> =
+        fetchReleases(source.owner, source.repo, perPage)
+
+    suspend fun fetchReleases(
+        owner: String,
+        repo: String,
+        perPage: Int = 40,
+        cacheKey: String? = null,
+        cacheFirst: Boolean = false,
+    ): List<Release> = withContext(Dispatchers.IO) {
+        val url = "https://api.github.com/repos/$owner/$repo/releases?per_page=$perPage"
+        parseReleases(getString(url, "application/vnd.github+json", cacheKey, cacheFirst))
     }
 
     /**
@@ -84,14 +109,6 @@ class GithubRepository {
                 }
             }
         }
-
-    /** Fetch a text file (e.g. the Morphe-Builds manifest.json) over HTTP. */
-    private fun download(url: String): String =
-        client.newCall(Request.Builder().url(url).header("User-Agent", "VMPro-App").build())
-            .execute().use { resp ->
-                if (!resp.isSuccessful) throw RuntimeException("Download error ${resp.code}")
-                resp.body?.string().orEmpty()
-            }
 
     private fun parseReleases(json: String): List<Release> {
         val arr = JSONArray(json)
@@ -133,24 +150,34 @@ class GithubRepository {
      *  The manifest has a stable `releases/latest/download/manifest.json` URL, so we download
      *  it in PARALLEL with the release list instead of waiting for the list first (two
      *  sequential round-trips becomes one). Only the latest release is needed. */
-    suspend fun fetchMorpheBuilds(source: Source): MorpheBuilds = coroutineScope {
+    suspend fun fetchMorpheBuilds(source: Source, cacheFirst: Boolean = false): MorpheBuilds =
+        coroutineScope {
         val manifestUrl =
             "https://github.com/${source.owner}/${source.repo}/releases/latest/download/manifest.json"
         val entriesDeferred = async(Dispatchers.IO) {
-            runCatching { parseManifest(download(manifestUrl)) }.getOrDefault(emptyMap())
+            runCatching {
+                parseManifest(getString(manifestUrl, cacheKey = "morphe.manifest", cacheFirst = cacheFirst))
+            }.getOrDefault(emptyMap())
         }
         val releasesDeferred = async(Dispatchers.IO) {
-            fetchReleases(source.owner, source.repo, perPage = 1)
+            runCatching {
+                fetchReleases(
+                    source.owner, source.repo, perPage = 1,
+                    cacheKey = "morphe.releases", cacheFirst = cacheFirst,
+                )
+            }.getOrDefault(emptyList())
         }
         val releases = releasesDeferred.await()
         val release = releases.firstOrNull { r -> r.assets.any { it.name == "manifest.json" } }
             ?: releases.firstOrNull()
         var entries = entriesDeferred.await()
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && !cacheFirst) {
             // Stable URL failed (e.g. not marked "Latest"); fall back to the fetched release's asset.
             val manifestAsset = release?.assets?.firstOrNull { it.name == "manifest.json" }
             entries = manifestAsset?.let {
-                runCatching { parseManifest(download(it.downloadUrl)) }.getOrDefault(emptyMap())
+                runCatching {
+                    parseManifest(getString(it.downloadUrl, cacheKey = "morphe.manifest"))
+                }.getOrDefault(emptyMap())
             } ?: emptyMap()
         }
         MorpheBuilds(release, entries)
@@ -208,8 +235,13 @@ class GithubRepository {
     // ---- TV tab: Android TV apps from their own release pages ----
 
     /** Latest non-prerelease APK for an Android TV app, preferring stable + the best arch. */
-    suspend fun resolveTv(entry: TvEntry): ResolvedAsset? {
-        val releases = fetchReleases(entry.owner, entry.repo, perPage = 6)
+    suspend fun resolveTv(entry: TvEntry, cacheFirst: Boolean = false): ResolvedAsset? {
+        val releases = runCatching {
+            fetchReleases(
+                entry.owner, entry.repo, perPage = 6,
+                cacheKey = "rel.${entry.owner}.${entry.repo}", cacheFirst = cacheFirst,
+            )
+        }.getOrDefault(emptyList())
         for (release in releases.filter { !it.prerelease }) {
             val apks = release.assets.filter { it.isApk }
             if (apks.isEmpty()) continue

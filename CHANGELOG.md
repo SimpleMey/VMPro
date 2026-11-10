@@ -2,6 +2,10 @@
 
 All notable changes to VMPro, newest first.
 
+## v4.5.7
+- **Added Flow.** Flow, a YouTube and YouTube Music client, is now in the Apps tab.
+- **Faster home screen.** The Apps tab now paints instantly from the last saved data when you open VMPro, then refreshes in the background, instead of waiting on the network every time.
+
 ## v4.5.6
 - **Silent install with Shizuku.** If you run Shizuku, turn it on in Settings, Security to install and update apps without the system prompt. Without Shizuku, the normal installer is used exactly as before.
 - **Verify on VirusTotal.** Add your own free VirusTotal API key in Settings, then check a downloaded app against VirusTotal from its app page before installing (a hash lookup, no upload).

@@ -10,6 +10,8 @@ import com.vmpro.app.BuildConfig
 import com.vmpro.app.analytics.Analytics
 import com.vmpro.app.data.APP_CATALOG
 import com.vmpro.app.data.Asset
+import com.vmpro.app.data.CacheMissException
+import com.vmpro.app.data.DiskCache
 import com.vmpro.app.data.GithubRepository
 import com.vmpro.app.data.InstalledPatchStore
 import com.vmpro.app.data.J_HC
@@ -107,7 +109,7 @@ sealed interface TabState {
 
 class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = GithubRepository()
+    private val repository = GithubRepository(DiskCache(app.cacheDir))
     private val pm: PackageManager = app.packageManager
     val downloads = DownloadController(app).also { it.register() }
 
@@ -331,6 +333,10 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun load(tab: Int) {
+        if (tab == TAB_APPS) {
+            loadApps()
+            return
+        }
         _states.update { it + (tab to TabState.Loading) }
         viewModelScope.launch {
             val state = try {
@@ -339,7 +345,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                         TAB_MICROG -> loadMicroG()
                         TAB_MODULES -> loadModules()
                         TAB_TV -> loadTv()
-                        else -> loadApps()
+                        else -> emptyList()
                     }
                 )
             } catch (e: Exception) {
@@ -349,15 +355,45 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Apps tab — Morphe auto-builds (manifest) plus direct-from-GitHub phone apps (NewTube). */
-    private suspend fun loadApps(): List<Section> = coroutineScope {
-        // Fetch the Morphe-Builds manifest and the direct GitHub apps (NewTube) in parallel,
-        // rather than one after another, so the Apps tab loads in a single round-trip's time.
-        val buildsDeferred = async {
+    /**
+     * Apps tab load with stale-while-revalidate: paint instantly from the previous launch's
+     * cached responses (no spinner), then refresh from the network and repaint. The very first
+     * launch (nothing cached yet) shows the spinner and then the fetched list, as before.
+     */
+    private fun loadApps() {
+        viewModelScope.launch {
+            val alreadyShown = _states.value[TAB_APPS] is TabState.Success
+            // Phase 1: instant paint from disk cache, when we have usable cached data.
+            val cached = runCatching { buildApps(cacheFirst = true) }.getOrNull()
+            if (cached != null && !alreadyShown) {
+                _states.update { it + (TAB_APPS to TabState.Success(cached)) }
+            } else if (!alreadyShown) {
+                _states.update { it + (TAB_APPS to TabState.Loading) }
+            }
+            // Phase 2: fresh from the network.
+            val fresh = try {
+                TabState.Success(buildApps(cacheFirst = false))
+            } catch (e: Exception) {
+                // A refresh failure keeps the cached list on screen rather than flipping to error.
+                if (cached != null) return@launch
+                TabState.Error(e.message ?: "Failed to load.")
+            }
+            _states.update { it + (TAB_APPS to fresh) }
+        }
+    }
+
+    /** Build the Apps sections. [cacheFirst] reads only the disk cache (for the instant paint). */
+    private suspend fun buildApps(cacheFirst: Boolean): List<Section> = coroutineScope {
+        val builds = if (cacheFirst) {
+            repository.fetchMorpheBuilds(MORPHE_BUILDS, cacheFirst = true)
+        } else {
             morpheBuilds ?: repository.fetchMorpheBuilds(MORPHE_BUILDS).also { morpheBuilds = it }
         }
-        val directDeferred = PHONE_DIRECT.map { entry -> async { loadReleaseItem(entry) } }
-        val builds = buildsDeferred.await()
+        // Nothing usable cached yet -> signal "no instant paint" so the caller shows the spinner.
+        if (cacheFirst && (builds.release == null || builds.entries.isEmpty())) throw CacheMissException()
+
+        // Resolve the direct GitHub apps (NewTube) in parallel with assembling the Morphe rows.
+        val directDeferred = PHONE_DIRECT.map { entry -> async { loadReleaseItem(entry, cacheFirst) } }
         val morpheItems = APP_CATALOG.map { entry ->
             val resolved = repository.resolveMorphe(builds, entry.appName, entry.source)
             val asset = resolved?.asset
@@ -413,8 +449,11 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Resolve one app straight from its own GitHub release (TV apps and direct phone apps). */
-    private suspend fun loadReleaseItem(entry: com.vmpro.app.data.TvEntry): CatalogItem {
-        val resolved = repository.resolveTv(entry)
+    private suspend fun loadReleaseItem(
+        entry: com.vmpro.app.data.TvEntry,
+        cacheFirst: Boolean = false,
+    ): CatalogItem {
+        val resolved = repository.resolveTv(entry, cacheFirst)
         val asset = resolved?.asset
         val version = resolved?.release?.tag
             ?.removePrefix("v")?.trimEnd('s')?.takeIf { it.isNotBlank() }

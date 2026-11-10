@@ -8,7 +8,7 @@ A lightweight Android app that surfaces **publicly available** release downloads
 GitHub and lets you grab and install them on-device. Built from scratch in Kotlin +
 Jetpack Compose, original code, not derived from any existing manager app.
 
-App name **VMPro** · versionName **4.5.6** · website **https://vmpro.app**
+App name **VMPro** · versionName **4.5.7** · website **https://vmpro.app**
 
 > We build this manager from scratch; we only add publicly available links from GitHub
 > projects: **[`J-hc`](https://github.com/j-hc/revanced-magisk-module),
@@ -27,6 +27,7 @@ tabs you can swipe between, all fetched live from the GitHub REST API (no token 
   - **Anddea (RVX)**: RVX App, RVX Music
   - **piko**: Twitter (X)
   - **NewTube** — from its own GitHub release
+  - **Flow**: a YouTube and YouTube Music client, from its own GitHub release
 - **MicroG** — the GmsCore backend needed for non-root builds:
   - **GmsCore** — [`ReVanced/GmsCore`](https://github.com/ReVanced/GmsCore/releases) (installs the Huawei HMS build on Huawei devices)
   - **MicroG RE** — [`MorpheApp/MicroG-RE`](https://github.com/MorpheApp/MicroG-RE/releases)
@@ -82,6 +83,7 @@ app/src/main/java/com/vmpro/app/
   data/Source.kt               # Source repos (shown on install pages / About)
   data/Catalog.kt              # Curated app list + device-arch matching rules
   data/GithubRepository.kt     # OkHttp fetch + latest / arch-aware asset resolution
+  data/DiskCache.kt            # Last-known API responses, for an instant Apps-tab first paint
   data/InstalledPatchStore.kt  # Tracks installed base + patch version (patch-only updates)
   ui/ManagerViewModel.kt       # Per-tab state, catalog resolution, download/install, VirusTotal
   ui/SettingsScreen.kt         # Settings: Downloads, Security (VirusTotal key, Shizuku), FAQ, About
@@ -145,5 +147,5 @@ Copy the APK to your phone and open it (enable "install unknown apps" for your f
 manager), or via ADB:
 
 ```bash
-adb install -r app/build/outputs/apk/release/vmpro-4.5.6.apk
+adb install -r app/build/outputs/apk/release/vmpro-4.5.7.apk
 ```
