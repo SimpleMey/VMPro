@@ -446,6 +446,7 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         "morphe" -> "MorpheApp/morphe-patches" to "https://github.com/MorpheApp/morphe-patches"
         "piko-newx", "piko" -> "crimera/piko-newx" to "https://github.com/crimera/piko-newx"
         "revanced-anddea" -> "anddea/revanced-patches" to "https://github.com/anddea/revanced-patches"
+        "reseam" -> "reseam/patches" to "https://git.reseam.app/reseam/patches"
         else -> null
     }
 

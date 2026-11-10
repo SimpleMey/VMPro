@@ -24,6 +24,7 @@
         <package android:name="app.morphe.android.apps.youtube.music" />
         <package android:name="anddea.youtube" />
         <package android:name="anddea.youtube.music" />
+        <package android:name="app.reseam.android.youtube" />
         <package android:name="com.reddit.frontpage.morphe" />
         <package android:name="com.twitter.android" />
         <package android:name="app.revanced.android.gms" />
