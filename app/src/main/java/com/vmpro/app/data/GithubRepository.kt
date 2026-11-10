@@ -3,6 +3,8 @@ package com.vmpro.app.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.OkHttpClient
@@ -28,6 +30,21 @@ sealed class VtOutcome {
 class CacheMissException : RuntimeException()
 
 /**
+ * The aggregated catalog Morphe-Builds publishes as a single CDN file: the latest releases for
+ * every repo VMPro shows, keyed "owner/repo", plus the raw Morphe manifest JSON. The app resolves
+ * its whole catalog from this instead of making many per-repo GitHub API calls.
+ */
+private class Catalog(
+    val repos: Map<String, List<Release>>,
+    val morpheManifestJson: String,
+)
+
+/** catalog.json on the Morphe-Builds `latest` release (CDN, not the rate-limited API). */
+private const val CATALOG_URL =
+    "https://github.com/SimpleMey/Morphe-Builds/releases/latest/download/catalog.json"
+private const val CATALOG_KEY = "catalog.json"
+
+/**
  * Fetches releases for any public GitHub repository via the REST API.
  * No token is required for public, low-volume access (60 req/h per IP).
  *
@@ -40,6 +57,10 @@ class CacheMissException : RuntimeException()
  */
 class GithubRepository(cacheDir: File? = null) {
     private val cache: DiskCache? = cacheDir?.let { DiskCache(it) }
+
+    // The fetched catalog, reused across one load; dropped by invalidateCatalog() on refresh.
+    @Volatile private var cachedCatalog: Catalog? = null
+    private val catalogLock = Mutex()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -99,10 +120,60 @@ class GithubRepository(cacheDir: File? = null) {
         cacheKey: String? = null,
         cacheFirst: Boolean = false,
     ): List<Release> = withContext(Dispatchers.IO) {
+        // Prefer the aggregated catalog.json (one CDN file, no GitHub API call); the live API is
+        // only a fallback for repos the catalog does not carry or when it is unavailable.
+        catalog(cacheFirst)?.repos?.get("$owner/$repo")?.let { rels ->
+            return@withContext if (rels.size > perPage) rels.take(perPage) else rels
+        }
         val url = "https://api.github.com/repos/$owner/$repo/releases?per_page=$perPage"
         // Every endpoint gets a cache key by default, so a 403 falls back to its last response.
         val key = cacheKey ?: "rel.$owner.$repo.$perPage"
         parseReleases(getString(url, "application/vnd.github+json", key, cacheFirst))
+    }
+
+    /**
+     * The aggregated catalog.json from Morphe-Builds (one CDN file covering every app), or null
+     * when it is unavailable so callers fall back to the live API. With [cacheFirst] it reads only
+     * the last saved copy (for the instant first paint); otherwise the fresh copy is fetched once
+     * per load and reused. [invalidateCatalog] drops it on an explicit refresh.
+     */
+    private suspend fun catalog(cacheFirst: Boolean): Catalog? {
+        if (cacheFirst) {
+            val json = withContext(Dispatchers.IO) {
+                runCatching {
+                    getString(CATALOG_URL, cacheKey = CATALOG_KEY, cacheFirst = true)
+                }.getOrNull()
+            } ?: return null
+            return runCatching { parseCatalog(json) }.getOrNull()
+        }
+        cachedCatalog?.let { return it }
+        return catalogLock.withLock {
+            cachedCatalog ?: run {
+                val json = withContext(Dispatchers.IO) {
+                    runCatching { getString(CATALOG_URL, cacheKey = CATALOG_KEY) }.getOrNull()
+                }
+                json?.let { runCatching { parseCatalog(it) }.getOrNull() }?.also { cachedCatalog = it }
+            }
+        }
+    }
+
+    /** Drop the cached catalog so the next load re-fetches it (called on an explicit refresh). */
+    fun invalidateCatalog() {
+        cachedCatalog = null
+    }
+
+    private fun parseCatalog(json: String): Catalog {
+        val root = JSONObject(json)
+        val reposObj = root.optJSONObject("repos") ?: JSONObject()
+        val repos = HashMap<String, List<Release>>()
+        val keys = reposObj.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            val arr = reposObj.optJSONArray(k) ?: continue
+            repos[k] = parseReleaseArray(arr)
+        }
+        val manifest = root.optJSONObject("morphe_manifest")?.toString().orEmpty()
+        return Catalog(repos, manifest)
     }
 
     /**
@@ -136,8 +207,9 @@ class GithubRepository(cacheDir: File? = null) {
             }
         }
 
-    private fun parseReleases(json: String): List<Release> {
-        val arr = JSONArray(json)
+    private fun parseReleases(json: String): List<Release> = parseReleaseArray(JSONArray(json))
+
+    private fun parseReleaseArray(arr: JSONArray): List<Release> {
         val releases = ArrayList<Release>(arr.length())
         for (i in 0 until arr.length()) {
             val r = arr.getJSONObject(i)
@@ -178,6 +250,17 @@ class GithubRepository(cacheDir: File? = null) {
      *  sequential round-trips becomes one). Only the latest release is needed. */
     suspend fun fetchMorpheBuilds(source: Source, cacheFirst: Boolean = false): MorpheBuilds =
         coroutineScope {
+        // Prefer the aggregated catalog.json: it carries the Morphe manifest and the Morphe-Builds
+        // release assets together, so no manifest download or API call is needed.
+        catalog(cacheFirst)?.let { cat ->
+            val entries = runCatching { parseManifest(cat.morpheManifestJson) }.getOrDefault(emptyMap())
+            val releases = cat.repos["${source.owner}/${source.repo}"].orEmpty()
+            val release = releases.firstOrNull { r -> r.assets.any { it.name == "manifest.json" } }
+                ?: releases.firstOrNull()
+            if (entries.isNotEmpty() && release != null) {
+                return@coroutineScope MorpheBuilds(release, entries)
+            }
+        }
         val manifestUrl =
             "https://github.com/${source.owner}/${source.repo}/releases/latest/download/manifest.json"
         val entriesDeferred = async(Dispatchers.IO) {

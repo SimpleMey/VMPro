@@ -5,7 +5,7 @@ All notable changes to VMPro, newest first.
 ## v4.5.7
 - **Added Flow.** Flow, a YouTube and YouTube Music client, is now in the Apps tab.
 - **Faster home screen.** The Apps tab now paints instantly from the last saved data when you open VMPro, then refreshes in the background, instead of waiting on the network every time.
-- **Fewer GitHub rate-limit errors.** VMPro now reuses GitHub's cached responses, which do not count against the hourly limit, and if the limit is still reached it shows your last loaded list instead of a "403" error.
+- **No more GitHub rate-limit errors.** VMPro now loads its whole app list from a single file published by the build pipeline instead of calling GitHub many times on each launch. It still caches responses and falls back to your last loaded list if GitHub's limit is ever reached, so you no longer see a "403" error.
 
 ## v4.5.6
 - **Silent install with Shizuku.** If you run Shizuku, turn it on in Settings, Security to install and update apps without the system prompt. Without Shizuku, the normal installer is used exactly as before.

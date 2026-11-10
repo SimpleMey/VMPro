@@ -176,6 +176,8 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() {
+        // Re-fetch the aggregated catalog.json too, so a pull-to-refresh picks up new versions.
+        repository.invalidateCatalog()
         when (_selectedTab.value) {
             TAB_APPS -> morpheBuilds = null
             TAB_MODULES -> jhcReleases = null
