@@ -4,10 +4,8 @@ All notable changes to VMPro, newest first.
 
 ## v4.5.6
 - **Silent install with Shizuku.** If you run Shizuku, turn it on in Settings, Security to install and update apps without the system prompt. Without Shizuku, the normal installer is used exactly as before.
-
-## v4.5.5
-- **"Is VMPro safe?" FAQ.** Settings now explains the Google Play Protect warning (a known false positive for app managers) and how to install past it.
 - **Verify on VirusTotal.** Add your own free VirusTotal API key in Settings, then check a downloaded app against VirusTotal from its app page before installing (a hash lookup, no upload).
+- **"Is VMPro safe?" FAQ.** Settings now explains the Google Play Protect warning (a known false positive for app managers) and how to install past it.
 
 ## v4.5.4
 - **Faster Apps tab.** The app list loads quicker: the Morphe-Builds manifest and the release list are now fetched in parallel instead of one after another, and the response is smaller.
